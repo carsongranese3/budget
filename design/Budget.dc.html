@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+:root,[data-theme="light"]{--bg:#f6f5f2;--surface:#ffffff;--surface-2:#f1f0ec;--line:#e6e4de;--line-strong:#d2cfc7;--ink:#1c1e1d;--ink-2:#5b615e;--ink-3:#868b88;--accent:oklch(0.43 0.055 200);--accent-ink:#ffffff;--accent-soft:oklch(0.95 0.018 200);--pos:oklch(0.5 0.12 155);--pos-soft:oklch(0.95 0.035 155);--neg:oklch(0.54 0.17 27);--neg-soft:oklch(0.96 0.025 27);--warn:oklch(0.72 0.14 70);--warn-ink:oklch(0.5 0.11 62);--warn-soft:oklch(0.96 0.045 85);--hl:oklch(0.977 0.03 88);--track:#ecebe6;--track-strong:#d4d1ca;--spend:oklch(0.63 0.02 230);--shadow:0 1px 2px rgba(20,24,22,.05),0 10px 28px rgba(20,24,22,.09);color-scheme:light}
+[data-theme="dark"]{--bg:#121413;--surface:#1a1d1c;--surface-2:#222625;--line:#2b302e;--line-strong:#3d4341;--ink:#e7e9e7;--ink-2:#a3a9a6;--ink-3:#757c79;--accent:oklch(0.75 0.07 200);--accent-ink:#0e1312;--accent-soft:oklch(0.3 0.035 200);--pos:oklch(0.76 0.13 155);--pos-soft:oklch(0.3 0.05 155);--neg:oklch(0.72 0.15 27);--neg-soft:oklch(0.3 0.06 27);--warn:oklch(0.79 0.13 75);--warn-ink:oklch(0.83 0.12 80);--warn-soft:oklch(0.31 0.05 75);--hl:oklch(0.245 0.028 80);--track:#2a2f2d;--track-strong:#434946;--spend:oklch(0.6 0.02 230);--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.4);color-scheme:dark}
+html,body{margin:0;background:var(--bg)}
+body{font-family:'Geist',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{cursor:default}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+input::placeholder{color:var(--ink-3)}
+</style>
+</helmet>
+<div data-theme="{{ theme }}" style="min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums">
+<header style="position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--line)">
+  <div style="max-width:1240px;margin:0 auto;box-sizing:border-box;padding:10px clamp(16px,3vw,36px);display:flex;align-items:center;gap:8px 22px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:9px;flex:none">
+      <div style="width:22px;height:22px;border-radius:6px;background:var(--accent);display:flex;align-items:flex-end;justify-content:center;gap:2px;padding-bottom:5px;box-sizing:border-box"><span style="width:3px;height:5px;background:var(--accent-ink);border-radius:1px"></span><span style="width:3px;height:10px;background:var(--accent-ink);border-radius:1px"></span><span style="width:3px;height:7px;background:var(--accent-ink);border-radius:1px"></span></div>
+      <div style="font-weight:600;font-size:15.5px;letter-spacing:-0.01em">Budget</div>
+    </div>
+    <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;gap:2px">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="6">
+          <button onClick="{{ n.go }}" style="display:flex;align-items:center;gap:6px;border:none;border-radius:7px;padding:7px 11px;background:{{ n.bg }};color:{{ n.color }};font-weight:{{ n.weight }};font-size:14px" style-hover="background:var(--surface-2)">{{ n.label }}<sc-if value="{{ n.hasBadge }}"><span style="font-size:11px;font-weight:500;padding:0 6px;border-radius:9px;background:var(--warn-soft);color:var(--warn-ink)">{{ n.badge }}</span></sc-if></button>
+        </sc-for>
+      </nav>
+    </sc-if>
+    <div style="flex:1"></div>
+    <sc-if value="{{ showThisMonth }}"><button onClick="{{ goThisMonth }}" style="border:none;background:none;color:var(--accent);font-size:13px;padding:4px 2px">Back to October</button></sc-if>
+    <div style="display:flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:9px;padding:3px;background:var(--surface)">
+      <button onClick="{{ prevMonth }}" disabled="{{ prevDisabled }}" aria-label="Previous month" style="width:28px;height:26px;border:none;border-radius:6px;background:transparent;font-size:17px;color:var(--ink-2);opacity:{{ prevOp }}" style-hover="background:var(--surface-2)">‹</button>
+      <div style="min-width:120px;text-align:center;font-weight:500;font-size:13.5px">{{ monthLabel }}</div>
+      <button onClick="{{ nextMonth }}" disabled="{{ nextDisabled }}" aria-label="Next month" style="width:28px;height:26px;border:none;border-radius:6px;background:transparent;font-size:17px;color:var(--ink-2);opacity:{{ nextOp }}" style-hover="background:var(--surface-2)">›</button>
+    </div>
+    <button onClick="{{ toggleTheme }}" style="border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;font-size:12.5px;color:var(--ink-2)" style-hover="background:var(--surface-2)">{{ themeLabel }}</button>
+  </div>
+  <sc-if value="{{ narrow }}">
+    <nav style="display:flex;gap:2px;overflow-x:auto;padding:0 12px 8px">
+      <sc-for list="{{ nav }}" as="n">
+        <button onClick="{{ n.go }}" style="flex:none;display:flex;align-items:center;gap:6px;border:none;border-radius:7px;padding:7px 11px;background:{{ n.bg }};color:{{ n.color }};font-weight:{{ n.weight }};font-size:13.5px">{{ n.label }}<sc-if value="{{ n.hasBadge }}"><span style="font-size:11px;padding:0 6px;border-radius:9px;background:var(--warn-soft);color:var(--warn-ink)">{{ n.badge }}</span></sc-if></button>
+      </sc-for>
+    </nav>
+  </sc-if>
+</header>
+
+<main style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center">
+  <div style="padding:28px clamp(16px,3vw,36px) 72px;max-width:1240px;width:100%;margin:0 auto;box-sizing:border-box;display:flex;flex-direction:column;gap:20px">
+
+<!-- DASHBOARD -->
+<sc-if value="{{ isDash }}" hint-placeholder-val="{{ true }}">
+  <sc-if value="{{ dashEmpty }}">
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div><h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.015em">Dashboard</h1></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;opacity:.6">
+        <div style="border:1px dashed var(--line-strong);border-radius:12px;padding:16px 18px"><div style="font-size:13px;color:var(--ink-2)">Income this month</div><div style="font-size:24px;font-weight:600;color:var(--ink-3)">—</div></div>
+        <div style="border:1px dashed var(--line-strong);border-radius:12px;padding:16px 18px"><div style="font-size:13px;color:var(--ink-2)">Spent this month</div><div style="font-size:24px;font-weight:600;color:var(--ink-3)">—</div></div>
+        <div style="border:1px dashed var(--line-strong);border-radius:12px;padding:16px 18px"><div style="font-size:13px;color:var(--ink-2)">Net</div><div style="font-size:24px;font-weight:600;color:var(--ink-3)">—</div></div>
+        <div style="border:1px dashed var(--line-strong);border-radius:12px;padding:16px 18px"><div style="font-size:13px;color:var(--ink-2)">Uncategorized</div><div style="font-size:24px;font-weight:600;color:var(--ink-3)">—</div></div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:48px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px">
+        <div style="width:44px;height:54px;border:1.5px solid var(--line-strong);border-radius:7px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:9px;box-sizing:border-box;font:500 11px 'Geist Mono',monospace;color:var(--ink-2)">CSV</div>
+        <h2 style="margin:6px 0 0;font-size:20px;font-weight:600;letter-spacing:-0.01em">Import your first statement</h2>
+        <p style="margin:0;max-width:440px;color:var(--ink-2);text-wrap:pretty">Budget works from the CSV files your bank already offers. Download one from your bank’s website, drop it in, and this page fills in.</p>
+        <button onClick="{{ goImport }}" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:10px 16px;font-size:14px;font-weight:500" style-hover="filter:brightness(1.08)">Go to Import →</button>
+        <div style="font-size:12.5px;color:var(--ink-3)">Everything stays on this laptop.</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ dashFull }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;gap:16px;height:{{ dashH }};min-height:{{ dashMinH }}">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div><h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.015em">Dashboard</h1><div style="color:var(--ink-2);margin-top:4px">{{ dashSub }}</div></div>
+        <button onClick="{{ goImport }}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 14px;font-size:13.5px;font-weight:500" style-hover="background:var(--surface-2)">Import CSV</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:13px;color:var(--ink-2)">Income this month</div>
+          <div style="font-size:26px;font-weight:600;letter-spacing:-0.02em;color:var(--pos)">{{ dIncome }}</div>
+          <div style="font-size:12.5px;color:var(--ink-3);min-height:18px">{{ dIncomeSub }}</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:13px;color:var(--ink-2)">Spent this month</div>
+          <div style="font-size:26px;font-weight:600;letter-spacing:-0.02em">{{ dSpent }}</div>
+          <div style="font-size:12.5px;color:var(--ink-3);min-height:18px">{{ dSpentSub }}</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:13px;color:var(--ink-2)">Net</div>
+          <div style="font-size:26px;font-weight:600;letter-spacing:-0.02em">{{ dNet }}</div>
+          <div style="font-size:12.5px;color:var(--ink-3);min-height:18px">{{ dNetSub }}</div>
+        </div>
+        <button onClick="{{ goUncat }}" style="text-align:left;background:{{ uncatBg }};border:1px solid {{ uncatBorder }};border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:4px" style-hover="border-color:var(--warn)">
+          <div style="font-size:13px;color:var(--ink-2)">Uncategorized</div>
+          <div style="font-size:26px;font-weight:600;letter-spacing:-0.02em;color:{{ uncatColor }}">{{ uncatCount }}</div>
+          <div style="font-size:12.5px;color:var(--ink-2);min-height:18px">{{ uncatSub }}</div>
+        </button>
+      </div>
+
+      <div style="display:flex;flex-wrap:{{ rowWrap }};gap:16px;align-items:stretch;flex:{{ rowFlexA }};min-height:{{ rowMinH }}">
+        <div style="flex:2 1 460px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px 14px;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+            <div style="font-weight:600;font-size:14.5px">Income vs spending</div>
+            <div style="display:flex;gap:14px;font-size:12.5px;color:var(--ink-2)">
+              <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:var(--pos)"></span>Income</span>
+              <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:var(--spend)"></span>Spending</span>
+            </div>
+          </div>
+          <div style="font-size:12.5px;color:var(--ink-2);margin-top:4px;min-height:19px">{{ chartCaption }}</div>
+          <div style="position:relative;margin-top:12px;padding-left:44px;flex:1;min-height:{{ chartMinH }};display:flex;flex-direction:column">
+            <div style="position:absolute;left:0;right:0;top:0;bottom:25px;pointer-events:none">
+              <sc-for list="{{ gridLines }}" as="g">
+                <div style="position:absolute;left:0;right:0;bottom:{{ g.pct }}%;border-top:1px solid var(--line)"><span style="position:absolute;left:0;top:-9px;font-size:11px;color:var(--ink-3);background:var(--surface);padding-right:6px">{{ g.label }}</span></div>
+              </sc-for>
+            </div>
+            <div style="position:relative;display:flex;gap:6px;flex:1;min-height:0" onMouseLeave="{{ clearHover }}">
+              <sc-for list="{{ chart }}" as="b" hint-placeholder-count="6">
+                <button onMouseEnter="{{ b.enter }}" onClick="{{ b.select }}" style="flex:1;min-width:0;border:none;background:transparent;padding:0;display:flex;flex-direction:column;align-items:center;gap:8px;height:100%">
+                  <div style="display:flex;align-items:flex-end;justify-content:center;gap:4px;flex:1;min-height:0;width:100%;opacity:{{ b.op }}">
+                    <div style="width:clamp(8px,26%,24px);height:{{ b.incH }}%;background:var(--pos);border-radius:3px 3px 0 0"></div>
+                    <div style="width:clamp(8px,26%,24px);height:{{ b.spH }}%;background:var(--spend);border-radius:3px 3px 0 0"></div>
+                  </div>
+                  <div style="font-size:12px;color:{{ b.labelColor }};font-weight:{{ b.labelWeight }}">{{ b.label }}</div>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:1 1 300px;min-width:0;min-height:0;overflow:hidden;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-weight:600;font-size:14.5px">Upcoming recurring</div>
+            <button onClick="{{ goRecurring }}" style="border:none;background:none;color:var(--accent);font-size:13px;padding:0">Manage</button>
+          </div>
+          <div style="flex:1;min-height:0;max-height:{{ scrollMaxH }};overflow-y:auto;display:flex;flex-direction:column;gap:12px;margin-right:-10px;padding-right:10px">
+          <sc-if value="{{ hasExpected }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:12px;color:var(--ink-3)">Expected this month, not imported yet</div>
+              <sc-for list="{{ expected }}" as="x">
+                <div style="display:flex;align-items:center;gap:12px;padding:9px 12px;border:1.5px dashed var(--line-strong);border-radius:10px;color:var(--ink-2)">
+                  <div style="width:38px;flex:none;text-align:center;border:1px dashed var(--line-strong);border-radius:7px;padding:3px 0;line-height:1.15"><div style="font-size:10px;color:var(--ink-3);font-weight:500">{{ x.mon }}</div><div style="font-size:14px;font-weight:600">{{ x.day }}</div></div>
+                  <div style="flex:1;min-width:0"><div style="font-weight:500">{{ x.name }}</div><div style="font-size:12px;color:var(--ink-3)">{{ x.sub }}</div></div>
+                  <div style="font-weight:500;color:{{ x.amtColor }};opacity:.75">{{ x.amt }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ upcoming }}" as="u" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line)">
+                <div style="width:38px;flex:none;text-align:center;border:1px solid var(--line);border-radius:7px;padding:3px 0;line-height:1.15"><div style="font-size:10px;color:var(--ink-3);font-weight:500">{{ u.mon }}</div><div style="font-size:14px;font-weight:600">{{ u.day }}</div></div>
+                <div style="flex:1;min-width:0"><div style="font-weight:500">{{ u.name }}</div><div style="font-size:12px;color:var(--ink-3)">{{ u.sub }}</div></div>
+                <div style="font-weight:500;color:{{ u.amtColor }}">{{ u.amt }}</div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ noUpcoming }}"><div style="color:var(--ink-3);font-size:13px;padding:8px 0">No recurring items yet.</div></sc-if>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-wrap:{{ rowWrap }};gap:16px;align-items:stretch;flex:{{ rowFlexB }};min-height:{{ rowMinH }}">
+        <div style="flex:1 1 380px;min-width:0;min-height:0;overflow:hidden;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-weight:600;font-size:14.5px">Spending by category</div><div style="font-size:12.5px;color:var(--ink-3)">{{ monthShort }}</div></div>
+          <div style="flex:1;min-height:0;max-height:{{ scrollMaxH }};overflow-y:auto;display:flex;flex-direction:column;gap:12px;margin-right:-10px;padding-right:10px">
+          <sc-for list="{{ catBars }}" as="c" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:minmax(96px,128px) minmax(0,1fr) 92px;gap:12px;align-items:center">
+              <div style="display:flex;align-items:center;gap:8px;font-size:13.5px;min-width:0"><span style="width:8px;height:8px;border-radius:50%;background:{{ c.color }};flex:none"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.name }}</span></div>
+              <div style="height:8px;background:var(--track);border-radius:4px;overflow:hidden"><div style="height:100%;width:{{ c.w }}%;background:{{ c.color }};border-radius:4px"></div></div>
+              <div style="text-align:right;font-size:13.5px;font-weight:500">{{ c.amt }}</div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ noCatBars }}"><div style="color:var(--ink-3);font-size:13px">{{ noMonthText }}</div></sc-if>
+          </div>
+        </div>
+
+        <div style="flex:1 1 380px;min-width:0;min-height:0;overflow:hidden;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-weight:600;font-size:14.5px">Budget progress</div><button onClick="{{ goBudgets }}" style="border:none;background:none;color:var(--accent);font-size:13px;padding:0">Edit budgets</button></div>
+          <div style="flex:1;min-height:0;max-height:{{ scrollMaxH }};overflow-y:auto;display:flex;flex-direction:column;gap:14px;margin-right:-10px;padding-right:10px">
+          <sc-for list="{{ dBudgets }}" as="b" hint-placeholder-count="6">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;justify-content:space-between;gap:12px;font-size:13.5px"><span>{{ b.name }}</span><span><span style="color:{{ b.spentColor }};font-weight:500">{{ b.spent }}</span><span style="color:var(--ink-3)"> / {{ b.budget }}</span></span></div>
+              <div style="height:6px;background:var(--track);border-radius:3px;overflow:hidden"><div style="height:100%;width:{{ b.w }}%;background:{{ b.bar }};border-radius:3px"></div></div>
+              <sc-if value="{{ b.hasNote }}"><div style="font-size:12px;color:{{ b.noteColor }}">{{ b.note }}</div></sc-if>
+            </div>
+          </sc-for>
+          <sc-if value="{{ noDBudgets }}"><div style="color:var(--ink-3);font-size:13px">No budgets set for this month. <button onClick="{{ goBudgets }}" style="border:none;background:none;color:var(--accent);padding:0;font-size:13px">Set budgets</button></div></sc-if>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</sc-if>
+
+<!-- TRANSACTIONS -->
+<sc-if value="{{ isTx }}">
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <div><h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.015em">Transactions</h1><div style="color:var(--ink-2);margin-top:4px">{{ txSummary }}</div></div>
+      <button onClick="{{ goImport }}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 14px;font-size:13.5px;font-weight:500" style-hover="background:var(--surface-2)">Import CSV</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input value="{{ q }}" onChange="{{ setQ }}" placeholder="Search descriptions" style="flex:1 1 220px;max-width:340px;box-sizing:border-box;padding:8px 12px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);outline:none" style-focus="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)">
+      <button onClick="{{ openAcctFilter }}" style="display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13.5px" style-hover="background:var(--surface-2)">{{ fAcctLabel }}<span style="width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.6;flex:none;margin-left:2px"></span></button>
+      <button onClick="{{ openCatFilter }}" style="display:inline-flex;align-items:center;gap:8px;border:1px solid {{ fCatBorder }};background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13.5px" style-hover="background:var(--surface-2)">{{ fCatLabel }}<span style="width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.6;flex:none;margin-left:2px"></span></button>
+      <sc-if value="{{ filtersActive }}"><button onClick="{{ clearFilters }}" style="border:none;background:none;color:var(--accent);font-size:13px;padding:6px 8px">Clear filters</button></sc-if>
+    </div>
+
+    <sc-if value="{{ hasTxRows }}" hint-placeholder-val="{{ true }}">
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+        <div style="overflow-x:auto">
+          <div style="min-width:760px">
+            <div style="display:grid;grid-template-columns:80px minmax(200px,1fr) 136px 200px 116px;gap:12px;padding:10px 18px;font-size:12.5px;color:var(--ink-3);font-weight:500;border-bottom:1px solid var(--line);background:var(--surface-2)">
+              <div>Date</div><div>Description</div><div>Account</div><div>Category</div><div style="text-align:right">Amount</div>
+            </div>
+            <sc-for list="{{ txRows }}" as="r" hint-placeholder-count="10">
+              <div style="border-bottom:1px solid var(--line);background:{{ r.bg }}">
+                <div style="display:grid;grid-template-columns:80px minmax(200px,1fr) 136px 200px 116px;gap:12px;padding:6px 18px;align-items:center;min-height:36px">
+                  <div style="color:var(--ink-2)">{{ r.date }}</div>
+                  <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.desc }}</div>
+                  <div style="color:var(--ink-2);font-size:13px">{{ r.acct }}</div>
+                  <div><button onClick="{{ r.openCat }}" style="display:inline-flex;align-items:center;gap:8px;max-width:100%;padding:5px 10px;border-radius:7px;border:1px solid {{ r.catBorder }};background:{{ r.catBg }};font-size:13px;color:var(--ink)" style-hover="border-color:var(--line-strong);background:var(--surface)"><span style="width:8px;height:8px;border-radius:50%;background:{{ r.catColor }};flex:none"></span><span>{{ r.cat }}</span><span style="width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.6;flex:none;margin-left:2px"></span></button></div>
+                  <div style="text-align:right;font-weight:500;color:{{ r.amtColor }}">{{ r.amt }}</div>
+                </div>
+                <sc-if value="{{ r.showPrompt }}">
+                  <div style="display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;margin:0 18px 10px 110px;padding:10px 12px;border-radius:9px;background:var(--accent-soft);font-size:13px">
+                    <span>Always categorize <strong style="font-weight:600">{{ prompt.merchant }}</strong> as <strong style="font-weight:600">{{ prompt.cat }}</strong>?</span>
+                    <button onClick="{{ createRule }}" style="border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:7px;padding:5px 11px;font-size:12.5px;font-weight:500">Create rule</button>
+                    <button onClick="{{ justOnce }}" style="border:1px solid var(--line-strong);background:var(--surface);border-radius:7px;padding:5px 11px;font-size:12.5px;font-weight:500">Just this once</button>
+                    <span style="color:var(--ink-2);font-size:12.5px">{{ prompt.extra }}</span>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ txEmpty }}">
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:56px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px">
+        <div style="width:40px;height:40px;border-radius:50%;border:1.5px dashed var(--line-strong)"></div>
+        <div style="font-size:17px;font-weight:600;margin-top:4px">{{ txEmptyTitle }}</div>
+        <div style="color:var(--ink-2);max-width:420px;text-wrap:pretty">{{ txEmptyBody }}</div>
+        <button onClick="{{ txEmptyAction }}" style="margin-top:6px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:500">{{ txEmptyBtn }}</button>
+      </div>
+    </sc-if>
+  </div>
+</sc-if>
+
+<!-- IMPORT -->
+<sc-if value="{{ isImport }}">
+  <div style="display:flex;flex-direction:column;gap:20px">
+    <div><h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.015em">Import</h1><div style="color:var(--ink-2);margin-top:4px">Bring in CSV exports from your bank. Files are read on this laptop and never uploaded.</div></div>
+    <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:8px">
+      <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center">
+          <sc-if value="{{ st.line }}"><div style="width:clamp(14px,4vw,44px);height:1px;background:var(--line-strong);margin:0 10px"></div></sc-if>
+          <button onClick="{{ st.go }}" style="display:flex;align-items:center;gap:8px;border:none;background:none;padding:4px 2px;color:{{ st.labelColor }};font-weight:{{ st.weight }};font-size:13.5px">
+            <span style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:{{ st.circleBg }};color:{{ st.circleColor }};border:1px solid {{ st.circleBorder }};box-sizing:border-box">{{ st.mark }}</span>
+            <span>{{ st.label }}</span>
+          </button>
+        </div>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{ isStep1 }}">
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" onClick="{{ openFile }}" style="border:1.5px dashed {{ dropBorder }};background:{{ dropBg }};border-radius:14px;padding:clamp(36px,7vw,64px) 24px;text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;transition:background .15s,border-color .15s" style-hover="border-color:var(--accent)">
+          <div style="width:44px;height:54px;border:1.5px solid var(--line-strong);background:var(--surface);border-radius:7px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:9px;box-sizing:border-box;font:500 11px 'Geist Mono',monospace;color:var(--ink-2)">CSV</div>
+          <div style="font-size:19px;font-weight:600;letter-spacing:-0.01em;margin-top:6px">Drop your bank’s CSV export here</div>
+          <div style="color:var(--ink-2)">or <span style="color:var(--accent);font-weight:500">choose files</span> · several files at once is fine</div>
+          <input type="file" ref="{{ fileRef }}" multiple="{{ true }}" accept=".csv,text/csv" onChange="{{ onFiles }}" style="display:none">
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:-8px">
+          <span style="color:var(--ink-3);font-size:13px">No file handy?</span>
+          <button onClick="{{ useSample }}" style="border:1px solid var(--line-strong);background:var(--surface);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500" style-hover="background:var(--surface-2)">Use a sample Chase export</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+          <div style="padding:14px 16px;border-radius:10px;background:var(--surface-2);display:flex;flex-direction:column;gap:4px"><div style="font-weight:500;font-size:13.5px">Chase</div><div style="font-size:13px;color:var(--ink-2);text-wrap:pretty">Open the account → Download account activity → choose Spreadsheet (CSV).</div></div>
+          <div style="padding:14px 16px;border-radius:10px;background:var(--surface-2);display:flex;flex-direction:column;gap:4px"><div style="font-weight:500;font-size:13.5px">American Express</div><div style="font-size:13px;color:var(--ink-2);text-wrap:pretty">Statements &amp; Activity → Download → choose CSV.</div></div>
+          <div style="padding:14px 16px;border-radius:10px;background:var(--surface-2);display:flex;flex-direction:column;gap:4px"><div style="font-weight:500;font-size:13.5px">Other banks</div><div style="font-size:13px;color:var(--ink-2);text-wrap:pretty">Look for Download, Export or Statements on the activity page. Pick CSV, not PDF.</div></div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+          <div style="padding:14px 18px;font-weight:600;font-size:14.5px;border-bottom:1px solid var(--line)">Recent imports</div>
+          <sc-if value="{{ hasImports }}" hint-placeholder-val="{{ true }}">
+            <div style="overflow-x:auto"><div style="min-width:560px">
+              <sc-for list="{{ recentImports }}" as="im" hint-placeholder-count="4">
+                <div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) 110px 150px;gap:12px;padding:11px 18px;border-bottom:1px solid var(--line);align-items:center">
+                  <div style="font:400 13px 'Geist Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ im.file }}</div>
+                  <div style="color:var(--ink-2);font-size:13px">{{ im.acct }}</div>
+                  <div style="color:var(--ink-2);font-size:13px">{{ im.date }}</div>
+                  <div style="text-align:right;font-size:13px"><span style="font-weight:500">{{ im.newN }}</span><span style="color:var(--ink-3)"> / {{ im.skip }}</span></div>
+                </div>
+              </sc-for>
+            </div></div>
+          </sc-if>
+          <sc-if value="{{ noImports }}"><div style="padding:18px;color:var(--ink-3);font-size:13px">No imports yet. Your first file will show up here.</div></sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isStep2 }}">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+          <div style="width:34px;height:42px;flex:none;border:1.5px solid var(--line-strong);border-radius:6px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;box-sizing:border-box;font:500 9px 'Geist Mono',monospace;color:var(--ink-2)">CSV</div>
+          <div style="flex:1;min-width:220px">
+            <div style="font-size:17px;font-weight:600">Set up this file</div>
+            <div style="color:var(--ink-2);font-size:13.5px;margin-top:2px;text-wrap:pretty"><span style="font-family:'Geist Mono',monospace;font-size:12.5px;color:var(--ink)">{{ fileName }}</span> · {{ fileNote }}. We haven’t seen this column layout before — set it up once and we’ll remember it.</div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px">
+          <div><div style="font-weight:600;font-size:14.5px">1 · Which account is this?</div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <sc-for list="{{ acctOpts }}" as="a" hint-placeholder-count="3">
+              <button onClick="{{ a.pick }}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px solid {{ a.border }};background:{{ a.bg }};text-align:left;min-width:180px">
+                <span style="width:16px;height:16px;border-radius:50%;border:1.5px solid {{ a.ring }};display:flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box"><span style="width:8px;height:8px;border-radius:50%;background:{{ a.dot }}"></span></span>
+                <span style="display:flex;flex-direction:column"><span style="font-weight:500">{{ a.label }}</span><span style="font-size:12px;color:var(--ink-3)">{{ a.sub }}</span></span>
+              </button>
+            </sc-for>
+          </div>
+          <sc-if value="{{ showNewAcct }}">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink-2)">Account name<input value="{{ newAcctName }}" onChange="{{ setNewAcctName }}" style="width:240px;max-width:100%;box-sizing:border-box;padding:8px 11px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);outline:none;font-size:14px;color:var(--ink)" style-focus="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)"></label>
+              <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink-2)">Type
+                <div style="display:inline-flex;padding:3px;border-radius:9px;background:var(--surface-2);border:1px solid var(--line);gap:2px">
+                  <sc-for list="{{ acctTypes }}" as="o"><button onClick="{{ o.pick }}" style="border:none;border-radius:6px;padding:6px 12px;font-size:13px;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.shadow }}">{{ o.label }}</button></sc-for>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
+            <div style="font-weight:600;font-size:14.5px">2 · What’s in each column?</div>
+            <div style="font-size:12.5px;color:var(--ink-3)">First 5 rows of the file · we pre-filled our best guess</div>
+          </div>
+          <div style="overflow-x:auto;border:1px solid var(--line);border-radius:10px">
+            <div style="min-width:900px">
+              <div style="display:grid;grid-template-columns:84px 104px minmax(240px,1.8fr) 96px 112px 100px 118px;gap:8px;padding:10px 12px;background:var(--surface-2);border-bottom:1px solid var(--line)">
+                <sc-for list="{{ mapCols }}" as="c" hint-placeholder-count="7">
+                  <button onClick="{{ c.open }}" style="display:flex;align-items:center;justify-content:space-between;gap:4px;padding:6px 8px;border-radius:7px;border:1px solid {{ c.border }};background:{{ c.bg }};color:{{ c.color }};font-size:12.5px;font-weight:500;min-width:0">{{ c.label }}<span style="width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.6;flex:none;margin-left:2px"></span></button>
+                </sc-for>
+              </div>
+              <div style="display:grid;grid-template-columns:84px 104px minmax(240px,1.8fr) 96px 112px 100px 118px;gap:8px;padding:8px 20px;border-bottom:1px solid var(--line)">
+                <sc-for list="{{ rawHead }}" as="h"><div style="font:500 12px 'Geist Mono',monospace;color:{{ h.color }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ h.text }}</div></sc-for>
+              </div>
+              <sc-for list="{{ rawRows }}" as="row" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:84px 104px minmax(240px,1.8fr) 96px 112px 100px 118px;gap:8px;padding:8px 20px;border-bottom:1px solid var(--line)">
+                  <sc-for list="{{ row.cells }}" as="cell"><div style="font:400 12.5px 'Geist Mono',monospace;color:{{ cell.color }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ cell.text }}</div></sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px">
+          <div style="font-weight:600;font-size:14.5px">3 · How are amounts signed?</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">
+            <sc-for list="{{ signOpts }}" as="o" hint-placeholder-count="3">
+              <button onClick="{{ o.pick }}" style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;border:1px solid {{ o.border }};background:{{ o.bg }};text-align:left">
+                <span style="margin-top:2px;width:16px;height:16px;border-radius:50%;border:1.5px solid {{ o.ring }};display:flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box"><span style="width:8px;height:8px;border-radius:50%;background:{{ o.dot }}"></span></span>
+                <span style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:500">{{ o.label }}</span><span style="font-size:12.5px;color:var(--ink-2)">{{ o.sub }}</span></span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">
+            <div style="padding:9px 14px;font-size:12.5px;color:var(--ink-3);background:var(--surface-2);border-bottom:1px solid var(--line)">Live preview — how these rows will be imported</div>
+            <sc-for list="{{ pvRows }}" as="p">
+              <div style="display:grid;grid-template-columns:64px minmax(0,1fr) 84px 108px;gap:12px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);font-size:13.5px">
+                <div style="color:var(--ink-2)">{{ p.date }}</div>
+                <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.desc }}</div>
+                <div><span style="font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:10px;background:{{ p.kindBg }};color:{{ p.kindColor }}">{{ p.kind }}</span></div>
+                <div style="text-align:right;font-weight:500;color:{{ p.amtColor }}">{{ p.amt }}</div>
+              </div>
+            </sc-for>
+            <div style="padding:10px 14px;font-size:13px;background:{{ pvMsgBg }};color:{{ pvMsgColor }};text-wrap:pretty">{{ pvMsg }}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;position:sticky;bottom:0;background:var(--bg);padding:12px 0;border-top:1px solid var(--line)">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer"><input type="checkbox" checked="{{ remember }}" onChange="{{ toggleRemember }}" style="accent-color:var(--accent);width:16px;height:16px;margin:0">{{ rememberLabel }}</label>
+          <div style="display:flex;gap:8px">
+            <button onClick="{{ back1 }}" style="border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:500" style-hover="background:var(--surface-2)">Back</button>
+            <button onClick="{{ toReview }}" disabled="{{ reviewDisabled }}" style="border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:500;opacity:{{ reviewOp }}" style-hover="filter:brightness(1.08)">Continue to review</button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isStep3 }}">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <sc-if value="{{ recognized }}"><div style="font-size:13px;color:var(--ink-2)">Recognized your saved format for this file — no setup needed.</div></sc-if>
+        <div style="display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;padding:14px 18px;border-radius:12px;background:var(--surface);border:1px solid var(--line);font-size:14.5px">
+          <span style="font-weight:600">{{ rv.found }} rows found</span><span style="color:var(--ink-3)">·</span>
+          <span style="font-weight:500">{{ rv.newN }} new</span><span style="color:var(--ink-3)">·</span>
+          <span style="color:var(--ink-2)">{{ rv.dupN }} already imported (skipped)</span><span style="color:var(--ink-3)">·</span>
+          <span style="color:{{ rv.needColor }};font-weight:500">{{ rv.needText }}</span>
+        </div>
+
+        <sc-if value="{{ hasReviewRows }}" hint-placeholder-val="{{ true }}">
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+            <div style="max-height:540px;overflow:auto">
+              <div style="min-width:640px">
+                <div style="position:sticky;top:0;z-index:1;display:grid;grid-template-columns:76px minmax(200px,1fr) 250px 112px;gap:12px;padding:10px 18px;font-size:12.5px;color:var(--ink-3);font-weight:500;border-bottom:1px solid var(--line);background:var(--surface-2)">
+                  <div>Date</div><div>Description</div><div>Category</div><div style="text-align:right">Amount</div>
+                </div>
+                <sc-for list="{{ reviewRows }}" as="r" hint-placeholder-count="10">
+                  <div style="display:grid;grid-template-columns:76px minmax(200px,1fr) 250px 112px;gap:12px;padding:6px 18px;align-items:center;min-height:36px;border-bottom:1px solid var(--line);background:{{ r.bg }}">
+                    <div style="color:var(--ink-2)">{{ r.date }}</div>
+                    <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.desc }}</div>
+                    <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                      <button onClick="{{ r.openCat }}" style="display:inline-flex;align-items:center;gap:8px;padding:5px 10px;border-radius:7px;border:1px solid {{ r.catBorder }};background:{{ r.catBg }};font-size:13px;color:var(--ink)" style-hover="border-color:var(--line-strong);background:var(--surface)"><span style="width:8px;height:8px;border-radius:50%;background:{{ r.catColor }};flex:none"></span><span>{{ r.catLabel }}</span><span style="width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.6;flex:none;margin-left:2px"></span></button>
+                      <sc-if value="{{ r.rule }}"><span title="{{ r.ruleTitle }}" style="font-size:11px;font-weight:500;padding:1px 6px;border-radius:5px;border:1px solid var(--line-strong);color:var(--ink-2)">rule</span></sc-if>
+                    </div>
+                    <div style="text-align:right;font-weight:500;color:{{ r.amtColor }}">{{ r.amt }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noReviewRows }}"><div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:28px 20px;color:var(--ink-2);text-align:center">Everything in this file is already imported. Nothing new to add.</div></sc-if>
+
+        <sc-if value="{{ hasDupes }}">
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+            <button onClick="{{ toggleDupes }}" style="width:100%;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;border:none;background:transparent;text-align:left;color:var(--ink-2)" style-hover="background:var(--surface-2)"><span style="font-size:11px;width:10px">{{ dupesCaret }}</span><span style="font-weight:500">{{ rv.dupN }} already imported — skipped</span><span style="flex:1"></span><span style="font-size:12.5px;color:var(--ink-3)">Matched on date, amount and description</span></button>
+            <sc-if value="{{ showDupes }}">
+              <div style="overflow-x:auto;border-top:1px solid var(--line)"><div style="min-width:640px">
+                <sc-for list="{{ dupRows }}" as="r">
+                  <div style="display:grid;grid-template-columns:76px minmax(200px,1fr) 250px 112px;gap:12px;padding:8px 18px;border-bottom:1px solid var(--line);color:var(--ink-3);font-size:13.5px">
+                    <div>{{ r.date }}</div><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.desc }}</div><div>{{ r.cat }}</div><div style="text-align:right">{{ r.amt }}</div>
+                  </div>
+                </sc-for>
+              </div></div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;position:sticky;bottom:0;background:var(--bg);padding:12px 0;border-top:1px solid var(--line)">
+          <div style="font-size:13px;color:var(--ink-2);max-width:460px;text-wrap:pretty">{{ importNote }}</div>
+          <div style="display:flex;gap:8px">
+            <button onClick="{{ backFromReview }}" style="border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:500" style-hover="background:var(--surface-2)">Back</button>
+            <button onClick="{{ doImport }}" disabled="{{ importDisabled }}" style="border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:9px 16px;font-size:13.5px;font-weight:500;opacity:{{ importOp }}" style-hover="filter:brightness(1.08)">{{ importBtnLabel }}</button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isStep4 }}">
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:48px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px">
+        <div style="width:48px;height:48px;border-radius:50%;background:var(--pos-soft);color:var(--pos);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600">✓</div>
+        <div style="font-size:21px;font-weight:600;letter-spacing:-0.01em;margin-top:6px">{{ successTitle }}</div>
+        <div style="color:var(--ink-2);max-width:480px;text-wrap:pretty">{{ successBody }}</div>
+        <sc-if value="{{ hasMatched }}"><div style="font-size:13px;color:var(--ink-2);padding:8px 12px;border-radius:8px;background:var(--surface-2)">{{ matchedText }}</div></sc-if>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px">
+          <button onClick="{{ goDashboard }}" style="border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:9px 16px;font-size:13.5px;font-weight:500" style-hover="filter:brightness(1.08)">Go to Dashboard</button>
+          <sc-if value="{{ hasUncatLeft }}"><button onClick="{{ reviewUncat }}" style="border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:500" style-hover="background:var(--surface-2)">{{ uncatLeftText }}</button></sc-if>
+          <button onClick="{{ importAnother }}" style="border:none;background:none;color:var(--accent);padding:9px 10px;font-size:13.5px">Import another file</button>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</sc-if>
+
+<!-- BUDGETS -->
+<sc-if value="{{ isBudgets }}">
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <div><h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.015em">Budgets</h1><div style="color:var(--ink-2);margin-top:4px">Monthly limits for {{ monthLabel }}. Edit any amount — it saves as you type.</div></div>
+      <button onClick="{{ copyBudgets }}" style="border:1px solid {{ copyBorder }};background:{{ copyBg }};color:{{ copyColor }};border-radius:8px;padding:8px 14px;font-size:13.5px;font-weight:500">{{ copyLabel }}</button>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;gap:16px 40px;flex-wrap:wrap">
+        <div><div style="font-size:13px;color:var(--ink-2)">Total budget</div><div style="font-size:24px;font-weight:600;letter-spacing:-0.02em">{{ bTotal }}</div></div>
+        <div><div style="font-size:13px;color:var(--ink-2)">Spent so far</div><div style="font-size:24px;font-weight:600;letter-spacing:-0.02em">{{ bSpent }}</div></div>
+        <div><div style="font-size:13px;color:var(--ink-2)">{{ bRemLabel }}</div><div style="font-size:24px;font-weight:600;letter-spacing:-0.02em;color:{{ bRemColor }}">{{ bRemain }}</div></div>
+      </div>
+      <div style="height:10px;background:var(--track);border-radius:5px;overflow:hidden"><div style="height:100%;width:{{ bW }}%;background:{{ bBar }};border-radius:5px"></div></div>
+      <div style="font-size:12.5px;color:var(--ink-3)">{{ bNote }}</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+      <div style="overflow-x:auto"><div style="min-width:700px">
+        <div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 140px 110px 120px minmax(140px,1.4fr);gap:16px;padding:10px 18px;font-size:12.5px;color:var(--ink-3);font-weight:500;border-bottom:1px solid var(--line);background:var(--surface-2)">
+          <div>Category</div><div>Monthly budget</div><div style="text-align:right">Spent</div><div style="text-align:right">Remaining</div><div>Progress</div>
+        </div>
+        <sc-for list="{{ budgetRows }}" as="b" hint-placeholder-count="8">
+          <div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 140px 110px 120px minmax(140px,1.4fr);gap:16px;padding:8px 18px;align-items:center;border-bottom:1px solid var(--line)">
+            <div style="display:flex;align-items:center;gap:8px;font-weight:500"><span style="width:8px;height:8px;border-radius:50%;background:{{ b.color }}"></span>{{ b.name }}</div>
+            <div style="display:flex;align-items:center;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);padding:0 10px;width:124px;box-sizing:border-box"><span style="color:var(--ink-3)">$</span><input value="{{ b.val }}" onChange="{{ b.set }}" inputMode="decimal" placeholder="0" style="border:none;outline:none;background:transparent;width:100%;padding:7px 0 7px 6px;text-align:right;color:var(--ink)"></div>
+            <div style="text-align:right">{{ b.spent }}</div>
+            <div style="text-align:right;color:{{ b.remColor }};font-weight:500">{{ b.remain }}</div>
+            <div style="display:flex;align-items:center;gap:10px"><div style="flex:1;height:6px;background:var(--track);border-radius:3px;overflow:hidden"><div style="height:100%;width:{{ b.w }}%;background:{{ b.bar }};border-radius:3px"></div></div><span style="font-size:12px;color:var(--ink-3);width:36px;text-align:right">{{ b.pct }}</span></div>
+          </div>
+        </sc-for>
+      </div></div>
+      <div style="padding:12px 18px;font-size:12.5px;color:var(--ink-3)">Income, Transfer and Uncategorized aren’t budgeted.</div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- RECURRING -->
+<sc-if value="{{ isRec }}">
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <div><h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.015em">Recurring</h1><div style="color:var(--ink-2);margin-top:4px">Bills and paychecks you expect on a schedule.</div></div>
+      <button onClick="{{ openRec }}" style="border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:8px 14px;font-size:13.5px;font-weight:500" style-hover="filter:brightness(1.08)">Add recurring</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px 20px;flex-wrap:wrap;padding:14px 18px;border-radius:12px;background:var(--surface-2)">
+      <div style="flex:1 1 280px;font-size:13.5px;color:var(--ink-2);text-wrap:pretty">Until a matching transaction is imported, each item shows on the Dashboard as <strong style="font-weight:600;color:var(--ink)">expected</strong> — dashed, like this. It turns solid once the payment arrives.</div>
+      <div style="flex:0 1 300px;display:flex;align-items:center;gap:12px;padding:8px 12px;border:1.5px dashed var(--line-strong);border-radius:10px;color:var(--ink-2);background:var(--surface)">
+        <div style="flex:1;min-width:0"><div style="font-weight:500;font-size:13.5px">Car insurance</div><div style="font-size:12px;color:var(--ink-3)">Expected Oct 22 · Chase Checking</div></div>
+        <div style="font-weight:500;opacity:.75">$142.00</div>
+      </div>
+    </div>
+    <sc-if value="{{ hasRec }}" hint-placeholder-val="{{ true }}">
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+        <div style="overflow-x:auto"><div style="min-width:980px">
+          <div style="display:grid;grid-template-columns:minmax(160px,1.3fr) 108px 150px 128px 116px 72px 200px 48px;gap:14px;padding:10px 18px;font-size:12.5px;color:var(--ink-3);font-weight:500;border-bottom:1px solid var(--line);background:var(--surface-2)">
+            <div>Name</div><div style="text-align:right">Amount</div><div>Category</div><div>Account</div><div>Frequency</div><div>Next</div><div>This period</div><div>Active</div>
+          </div>
+          <sc-for list="{{ recRows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:minmax(160px,1.3fr) 108px 150px 128px 116px 72px 200px 48px;gap:14px;padding:10px 18px;align-items:center;border-bottom:1px solid var(--line);opacity:{{ r.op }}">
+              <div style="min-width:0"><div style="font-weight:500">{{ r.name }}</div><div style="font-size:12px;color:var(--ink-3);font-family:'Geist Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.match }}</div></div>
+              <div style="text-align:right;font-weight:500;color:{{ r.amtColor }}">{{ r.amt }}</div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:13.5px"><span style="width:8px;height:8px;border-radius:50%;background:{{ r.color }}"></span>{{ r.cat }}</div>
+              <div style="color:var(--ink-2);font-size:13.5px">{{ r.acct }}</div>
+              <div style="color:var(--ink-2);font-size:13.5px">{{ r.freq }}</div>
+              <div style="font-size:13.5px">{{ r.next }}</div>
+              <div><span style="display:inline-flex;font-size:12.5px;padding:3px 9px;border-radius:7px;border:1px {{ r.stBorder }} var(--line-strong);color:{{ r.stColor }};background:{{ r.stBg }}">{{ r.status }}</span></div>
+              <div><button onClick="{{ r.toggle }}" aria-label="Toggle active" style="width:34px;height:20px;border-radius:10px;border:none;background:{{ r.trackBg }};padding:0;position:relative"><span style="position:absolute;top:2px;left:{{ r.knobX }}px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s"></span></button></div>
+            </div>
+          </sc-for>
+        </div></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ noRec }}">
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:48px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px">
+        <div style="font-size:17px;font-weight:600">No recurring items yet</div>
+        <div style="color:var(--ink-2);max-width:400px">Add your rent, paycheck and subscriptions so you can see what’s coming before it arrives.</div>
+        <button onClick="{{ openRec }}" style="margin-top:6px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:500">Add recurring</button>
+      </div>
+    </sc-if>
+  </div>
+</sc-if>
+
+<!-- SETTINGS -->
+<sc-if value="{{ isSettings }}">
+  <div style="display:flex;flex-direction:column;gap:16px;max-width:880px">
+    <div><h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.015em">Settings</h1></div>
+
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div><div style="font-weight:600;font-size:14.5px">Appearance</div><div style="font-size:13px;color:var(--ink-2)">Applies to this laptop only.</div></div>
+      <div style="display:inline-flex;padding:3px;border-radius:9px;background:var(--surface-2);border:1px solid var(--line);gap:2px">
+        <sc-for list="{{ themeOpts }}" as="o"><button onClick="{{ o.pick }}" style="border:none;border-radius:6px;padding:6px 14px;font-size:13px;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.shadow }}">{{ o.label }}</button></sc-for>
+      </div>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--line)"><div style="font-weight:600;font-size:14.5px">Accounts</div><div style="font-size:13px;color:var(--ink-2)">Created when you import a file. The saved format lets the next import skip setup.</div></div>
+      <sc-if value="{{ hasAccts }}" hint-placeholder-val="{{ true }}">
+        <div style="overflow-x:auto"><div style="min-width:600px">
+          <div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 110px minmax(170px,1fr) 120px;gap:14px;padding:9px 20px;font-size:12.5px;color:var(--ink-3);font-weight:500;background:var(--surface-2);border-bottom:1px solid var(--line)"><div>Name</div><div>Type</div><div>Saved CSV format</div><div>Last import</div></div>
+          <sc-for list="{{ acctRows }}" as="a" hint-placeholder-count="2">
+            <div style="display:grid;grid-template-columns:minmax(150px,1.2fr) 110px minmax(170px,1fr) 120px;gap:14px;padding:11px 20px;border-bottom:1px solid var(--line);align-items:center;font-size:13.5px">
+              <div style="font-weight:500">{{ a.name }}</div><div style="color:var(--ink-2)">{{ a.type }}</div><div style="color:{{ a.fmtColor }}">{{ a.format }}</div><div style="color:var(--ink-2)">{{ a.last }}</div>
+            </div>
+          </sc-for>
+        </div></div>
+      </sc-if>
+      <sc-if value="{{ noAccts }}"><div style="padding:16px 20px;color:var(--ink-3);font-size:13px">No accounts yet. Import a file to create one.</div></sc-if>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--line)"><div style="font-weight:600;font-size:14.5px">Categories</div><div style="font-size:13px;color:var(--ink-2)">Click a color to change it, edit a name to rename. Excluded categories don’t count toward any total.</div></div>
+      <sc-for list="{{ catRows }}" as="c" hint-placeholder-count="11">
+        <div style="display:flex;align-items:center;gap:12px;padding:8px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap">
+          <button onClick="{{ c.openColor }}" aria-label="Change color" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line-strong);background:{{ c.color }};padding:0;flex:none"></button>
+          <input value="{{ c.val }}" onChange="{{ c.setVal }}" onBlur="{{ c.commit }}" onKeyDown="{{ c.onKey }}" readOnly="{{ c.locked }}" style="flex:1 1 160px;min-width:0;border:1px solid transparent;border-radius:7px;background:transparent;padding:6px 8px;font-size:14px;font-weight:500;outline:none;color:var(--ink)" style-hover="border-color:var(--line)" style-focus="border-color:var(--accent);background:var(--surface)">
+          <span style="font-size:12.5px;color:var(--ink-3)">{{ c.note }}</span>
+          <sc-if value="{{ c.canExclude }}">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><button onClick="{{ c.toggleExcl }}" aria-label="Exclude from totals" style="width:34px;height:20px;border-radius:10px;border:none;background:{{ c.trackBg }};padding:0;position:relative"><span style="position:absolute;top:2px;left:{{ c.knobX }}px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s"></span></button>Exclude from totals</label>
+          </sc-if>
+        </div>
+      </sc-for>
+      <div style="display:flex;gap:8px;padding:12px 20px;flex-wrap:wrap">
+        <input value="{{ newCat }}" onChange="{{ setNewCat }}" onKeyDown="{{ newCatKey }}" placeholder="New category name" style="flex:0 1 240px;box-sizing:border-box;padding:7px 11px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);outline:none" style-focus="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)">
+        <button onClick="{{ addCat }}" style="border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 13px;font-size:13.5px;font-weight:500" style-hover="background:var(--surface-2)">Add category</button>
+      </div>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--line)"><div style="font-weight:600;font-size:14.5px">Rules</div><div style="font-size:13px;color:var(--ink-2)">When a description contains this text, the category is set automatically on import.</div></div>
+      <sc-for list="{{ ruleRows }}" as="r" hint-placeholder-count="6">
+        <div style="border-bottom:1px solid var(--line)">
+          <sc-if value="{{ r.notEditing }}">
+            <div style="display:flex;align-items:center;gap:12px;padding:9px 20px;flex-wrap:wrap">
+              <span style="font:500 12.5px 'Geist Mono',monospace;padding:3px 8px;border-radius:6px;background:var(--surface-2)">{{ r.merchant }}</span>
+              <span style="color:var(--ink-3)">→</span>
+              <span style="display:flex;align-items:center;gap:8px;font-size:13.5px"><span style="width:8px;height:8px;border-radius:50%;background:{{ r.color }}"></span>{{ r.cat }}</span>
+              <span style="flex:1"></span>
+              <button onClick="{{ r.edit }}" style="border:none;background:none;color:var(--ink-2);font-size:13px;padding:4px 8px;border-radius:6px" style-hover="background:var(--surface-2)">Edit</button>
+              <button onClick="{{ r.del }}" style="border:none;background:none;color:var(--neg);font-size:13px;padding:4px 8px;border-radius:6px" style-hover="background:var(--neg-soft)">Delete</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ r.editing }}">
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 20px;flex-wrap:wrap;background:var(--surface-2)">
+              <input value="{{ r.draftMerchant }}" onChange="{{ r.setDraft }}" style="flex:0 1 240px;box-sizing:border-box;padding:6px 10px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);outline:none;font:500 12.5px 'Geist Mono',monospace;color:var(--ink)">
+              <span style="color:var(--ink-3)">→</span>
+              <button onClick="{{ r.openCat }}" style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;border:1px solid var(--line-strong);background:var(--surface);font-size:13px"><span style="width:8px;height:8px;border-radius:50%;background:{{ r.draftColor }}"></span>{{ r.draftCat }}<span style="width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.6;flex:none;margin-left:2px"></span></button>
+              <span style="flex:1"></span>
+              <button onClick="{{ r.cancel }}" style="border:none;background:none;color:var(--ink-2);font-size:13px;padding:5px 8px">Cancel</button>
+              <button onClick="{{ r.save }}" style="border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:7px;padding:5px 12px;font-size:13px;font-weight:500">Save</button>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+      <sc-if value="{{ noRules }}"><div style="padding:16px 20px;color:var(--ink-3);font-size:13px">No rules yet. Change a transaction’s category and choose “Create rule”.</div></sc-if>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div><div style="font-weight:600;font-size:14.5px">Data</div><div style="font-size:13px;color:var(--ink-2)">Everything lives in a local file on this laptop.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onClick="{{ loadSample }}" style="border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:8px 13px;font-size:13.5px;font-weight:500" style-hover="background:var(--surface-2)">Load sample data</button>
+        <button onClick="{{ eraseData }}" style="border:1px solid var(--neg);background:var(--surface);color:var(--neg);border-radius:8px;padding:8px 13px;font-size:13.5px;font-weight:500" style-hover="background:var(--neg-soft)">Erase all data</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+  </div>
+</main>
+
+<sc-if value="{{ recPanel }}">
+  <div onClick="{{ closeRec }}" style="position:fixed;inset:0;background:rgba(10,14,12,.3);z-index:40"></div>
+  <div style="position:fixed;top:0;right:0;bottom:0;width:min(420px,100%);background:var(--surface);border-left:1px solid var(--line);z-index:41;display:flex;flex-direction:column;box-shadow:var(--shadow)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)">
+      <div style="font-size:17px;font-weight:600">Add recurring</div>
+      <button onClick="{{ closeRec }}" aria-label="Close" style="border:none;background:none;font-size:20px;color:var(--ink-2);width:32px;height:32px;border-radius:7px" style-hover="background:var(--surface-2)">×</button>
+    </div>
+    <div style="flex:1;overflow:auto;padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink-2)">Name<input value="{{ rf.name }}" onChange="{{ rf.setName }}" placeholder="e.g. Gym membership" style="box-sizing:border-box;padding:9px 11px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);outline:none;font-size:14px;color:var(--ink)" style-focus="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)"></label>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink-2)">Type
+        <div style="display:inline-flex;align-self:flex-start;padding:3px;border-radius:9px;background:var(--surface-2);border:1px solid var(--line);gap:2px">
+          <sc-for list="{{ kindOpts }}" as="o"><button onClick="{{ o.pick }}" style="border:none;border-radius:6px;padding:6px 14px;font-size:13px;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.shadow }}">{{ o.label }}</button></sc-for>
+        </div>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink-2)">Amount
+        <div style="display:flex;align-items:center;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);padding:0 11px;width:180px;box-sizing:border-box"><span style="color:var(--ink-3);font-size:14px">$</span><input value="{{ rf.amount }}" onChange="{{ rf.setAmount }}" inputMode="decimal" placeholder="0.00" style="border:none;outline:none;background:transparent;width:100%;padding:9px 0 9px 6px;font-size:14px;color:var(--ink)"></div>
+      </label>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink-2);flex:1 1 150px">Category
+          <button onClick="{{ rf.openCat }}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);font-size:14px;text-align:left;color:var(--ink)"><span style="width:8px;height:8px;border-radius:50%;background:{{ rf.catColor }}"></span><span style="flex:1">{{ rf.cat }}</span><span style="width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.6;flex:none;margin-left:2px"></span></button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink-2);flex:1 1 150px">Account
+          <button onClick="{{ rf.openAcct }}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);font-size:14px;text-align:left;color:var(--ink)"><span style="flex:1">{{ rf.acct }}</span><span style="width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.6;flex:none;margin-left:2px"></span></button>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink-2)">Frequency
+        <div style="display:inline-flex;align-self:flex-start;padding:3px;border-radius:9px;background:var(--surface-2);border:1px solid var(--line);gap:2px;flex-wrap:wrap">
+          <sc-for list="{{ freqOpts }}" as="o"><button onClick="{{ o.pick }}" style="border:none;border-radius:6px;padding:6px 12px;font-size:13px;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.shadow }}">{{ o.label }}</button></sc-for>
+        </div>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink-2)">Next date<input type="date" value="{{ rf.next }}" onChange="{{ rf.setNext }}" style="align-self:flex-start;box-sizing:border-box;padding:8px 11px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);outline:none;font-size:14px;color:var(--ink)"></label>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--ink-2)">Match imported transactions containing<input value="{{ rf.match }}" onChange="{{ rf.setMatch }}" placeholder="e.g. PLANET FITNESS" style="box-sizing:border-box;padding:9px 11px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);outline:none;font:500 13px 'Geist Mono',monospace;color:var(--ink)" style-focus="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)"><span style="color:var(--ink-3);font-size:12px;text-wrap:pretty">Until a match is imported, this shows as expected on the Dashboard.</span></label>
+      <sc-if value="{{ hasRecErr }}"><div style="font-size:13px;color:var(--neg)">{{ recErr }}</div></sc-if>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--line)">
+      <button onClick="{{ closeRec }}" style="border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:500">Cancel</button>
+      <button onClick="{{ saveRec }}" style="border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:9px 15px;font-size:13.5px;font-weight:500">Save</button>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ pk.open }}">
+  <div onClick="{{ pk.close }}" style="position:fixed;inset:0;z-index:50"></div>
+  <div style="position:fixed;top:{{ pk.top }}px;left:{{ pk.left }}px;min-width:{{ pk.minW }}px;max-height:{{ pk.maxH }}px;overflow:auto;z-index:51;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:5px;box-sizing:border-box">
+    <sc-for list="{{ pk.options }}" as="o">
+      <button onClick="{{ o.pick }}" style="display:flex;align-items:center;gap:9px;width:100%;border:none;border-radius:6px;padding:7px 10px;background:{{ o.bg }};font-size:13.5px;text-align:left;color:var(--ink)" style-hover="background:var(--surface-2)"><span style="width:8px;height:8px;border-radius:50%;background:{{ o.color }};flex:none;display:{{ o.dot }}"></span><span style="flex:1;white-space:nowrap">{{ o.label }}</span><span style="color:var(--accent);font-size:12px;width:12px">{{ o.check }}</span></button>
+    </sc-for>
+  </div>
+</sc-if>
+
+<sc-if value="{{ hasToast }}">
+  <div style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:9px;font-size:13.5px;box-shadow:var(--shadow);max-width:calc(100% - 32px)">{{ toast }}</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc-logic" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light","tsType":"&#39;light&#39;|&#39;dark&#39;"},"firstRun":{"editor":"boolean","default":false,"tsType":"boolean"},"startScreen":{"editor":"enum","options":["dashboard","transactions","import","budgets","recurring","settings"],"default":"dashboard","tsType":"string"}}'>
+const TODAY='2026-10-25';
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const pad=n=>String(n).padStart(2,'0');
+const ds=(y,m,d)=>y+'-'+pad(m)+'-'+pad(d);
+const dim=(y,m)=>new Date(y,m,0).getDate();
+const addDays=(s,n)=>{const [y,m,d]=s.split('-').map(Number);return new Date(Date.UTC(y,m-1,d+n)).toISOString().slice(0,10);};
+const dayNum=s=>{const [y,m,d]=s.split('-').map(Number);return Date.UTC(y,m-1,d)/864e5;};
+const fd=s=>{const p=s.split('-').map(Number);return MS[p[1]-1]+' '+p[2];};
+const fdl=s=>fd(s)+', '+s.slice(0,4);
+const money=n=>'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const byDate=(a,b)=>b.date.localeCompare(a.date)||(a.id<b.id?-1:1);
+function rng(seed){let s=seed>>>0;return()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};}
+const GRO=["TRADER JOE'S #552","SAFEWAY #1711","WHOLE FOODS MKT #10234","RAINBOW GROCERY COOP"];
+const DIN=["SWEETGREEN MISSION","BLUE BOTTLE COFFEE","TST* LA TAQUERIA","CHIPOTLE 2291","DOORDASH*KIN KHAO","TARTINE BAKERY"];
+const TRN=["SHELL OIL 57442","CLIPPER TRANSIT","UBER *TRIP","SFMTA METER"];
+const SHO=["AMAZON.COM*MK1A2","TARGET 00027","REI #45","UNIQLO USA"];
+const ENT=["AMC METREON 16","STEAMGAMES.COM","ALAMO DRAFTHOUSE"];
+const SW=[['Teal','oklch(0.6 0.09 190)'],['Amber','oklch(0.67 0.12 55)'],['Slate','oklch(0.55 0.07 255)'],['Sky','oklch(0.66 0.09 225)'],['Iris','oklch(0.6 0.1 290)'],['Orchid','oklch(0.63 0.11 335)'],['Ochre','oklch(0.72 0.11 88)'],['Rose','oklch(0.63 0.13 15)'],['Green','oklch(0.58 0.12 150)'],['Stone','oklch(0.68 0.01 250)'],['Sand','oklch(0.76 0.04 80)']];
+const CATS0=[{name:'Groceries',color:SW[0][1]},{name:'Dining',color:SW[1][1]},{name:'Rent',color:SW[2][1]},{name:'Utilities',color:SW[3][1]},{name:'Transportation',color:SW[4][1]},{name:'Subscriptions',color:SW[5][1]},{name:'Shopping',color:SW[6][1]},{name:'Entertainment',color:SW[7][1]},{name:'Income',color:SW[8][1],locked:true},{name:'Transfer',color:SW[9][1],excluded:true},{name:'Uncategorized',color:SW[10][1],locked:true}];
+const BUDGET0={Groceries:'450',Dining:'300',Rent:'1650',Utilities:'220',Transportation:'300',Subscriptions:'35',Shopping:'150',Entertainment:'80'};
+const RULES0=[["TRADER JOE'S",'Groceries'],['SAFEWAY','Groceries'],['SHELL OIL','Transportation'],['PAYROLL','Income'],['PG&E','Utilities'],['NETFLIX','Subscriptions'],['EPAYMENT','Transfer'],['AUTOPAY PAYMENT','Transfer'],['GEICO','Transportation'],['OAKWOOD PROPERTY','Rent'],['TRANSFER TO SAV','Transfer']].map((r,i)=>({id:'r'+i,merchant:r[0],cat:r[1]}));
+const REC0=[{id:'rc1',name:'Rent',amount:-1650,cat:'Rent',account:'chase',freq:'monthly',anchor:'2026-11-01',match:'OAKWOOD PROPERTY',active:true},{id:'rc2',name:'Paycheck',amount:2400,cat:'Income',account:'chase',freq:'biweekly',anchor:'2026-11-07',match:'PAYROLL',active:true},{id:'rc3',name:'Netflix',amount:-15.49,cat:'Subscriptions',account:'amex',freq:'monthly',anchor:'2026-11-03',match:'NETFLIX',active:true},{id:'rc4',name:'Spotify',amount:-11.99,cat:'Subscriptions',account:'amex',freq:'monthly',anchor:'2026-11-12',match:'SPOTIFY',active:true},{id:'rc5',name:'Car insurance',amount:-142,cat:'Transportation',account:'chase',freq:'monthly',anchor:'2026-11-22',match:'GEICO',active:true},{id:'rc6',name:'Amazon Prime',amount:-139,cat:'Shopping',account:'amex',freq:'yearly',anchor:'2027-03-14',match:'AMAZON PRIME',active:true}];
+const ACC0=[{id:'chase',name:'Chase Checking',type:'Checking',format:null,last:'2026-10-10'},{id:'amex',name:'Amex Card',type:'Credit card',format:'Amex · 5 columns',last:'2026-10-20'}];
+const IMP0=[{file:'Amex_Activity_2026-10-20.csv',acct:'Amex Card',date:'2026-10-20',newN:23,skip:4},{file:'Chase_Activity_20261010.CSV',acct:'Chase Checking',date:'2026-10-10',newN:19,skip:6},{file:'Chase_Activity_20260926.CSV',acct:'Chase Checking',date:'2026-09-26',newN:21,skip:5},{file:'Amex_Activity_2026-09-21.csv',acct:'Amex Card',date:'2026-09-21',newN:27,skip:3}];
+const FREQ={monthly:'Monthly',biweekly:'Every 2 weeks',yearly:'Yearly'};
+const MAPT=['Date','Description','Amount','Debit','Credit','Ignore'];
+const MAP0=['Ignore','Date','Description','Amount','Ignore','Ignore','Ignore'];
+const RAW_HEAD=['Details','Posting Date','Description','Amount','Type','Balance','Check or Slip #'];
+function genSample(){
+  const r=rng(11),R=(a,b)=>Math.round((a+r()*(b-a))*100)/100,pick=a=>a[Math.floor(r()*a.length)];
+  let id=1;const tx=[];const push=(date,desc,account,cat,amount)=>tx.push({id:'t'+String(id++).padStart(4,'0'),date,desc,account,cat,amount});
+  for(let m=1;m<=10;m++){const D=d=>ds(2026,m,d),n=dim(2026,m);
+    push(D(1),'ZELLE TO OAKWOOD PROPERTY MGMT','chase','Rent',-1650);
+    push(D(3),'NETFLIX.COM','amex','Subscriptions',-15.49);
+    push(D(8),'APPLE.COM/BILL','amex','Subscriptions',-2.99);
+    push(D(12),'SPOTIFY USA','amex','Subscriptions',-11.99);
+    push(D(14),'PG&E WEB ONLINE','chase','Utilities',-R(64,118));
+    push(D(18),'COMCAST XFINITY','chase','Utilities',-79.99);
+    push(D(22),'GEICO *AUTO','chase','Transportation',-142);
+    const p=R(780,1350);push(D(6),'AMEX EPAYMENT ACH PMT','chase','Transfer',-p);push(D(6),'AUTOPAY PAYMENT - THANK YOU','amex','Transfer',p);
+    const pool=(arr,c,a,b,cat)=>{for(let i=0;i<c;i++)push(D(1+Math.floor(r()*n)),pick(arr),r()<0.55?'amex':'chase',cat,-R(a,b));};
+    pool(GRO,6,24,100,'Groceries');pool(DIN,7,5.5,52,'Dining');pool(TRN,3,6,50,'Transportation');pool(SHO,2+Math.floor(r()*2),16,120,'Shopping');pool(ENT,1+Math.floor(r()*2),12,36,'Entertainment');
+  }
+  let d='2026-11-07';for(;;){d=addDays(d,-14);if(d<'2026-01-01')break;push(d,'ACME CORP PAYROLL PPD','chase','Income',2400);}
+  const out=tx.filter(t=>!(t.date.startsWith('2026-10')&&((t.account==='chase'&&t.date>'2026-10-10')||(t.account==='amex'&&t.date>'2026-10-20'))));
+  out.push({id:'t9001',date:'2026-10-13',desc:'SQ *DOLORES PARK CAFE',account:'amex',cat:'Uncategorized',amount:-14.25});
+  out.push({id:'t9002',date:'2026-10-16',desc:'PAYPAL *VINTAGEFINDS',account:'amex',cat:'Uncategorized',amount:-48});
+  out.sort(byDate);
+  return{tx:out,dupes:out.filter(t=>t.account==='chase').slice(0,18)};
+}
+function genImport(){
+  const r=rng(42),R=(a,b)=>Math.round((a+r()*(b-a))*100)/100,pick=a=>a[Math.floor(r()*a.length)];
+  const rows=[];let id=1;const add=(date,desc,amount,guess)=>rows.push({id:'i'+pad(id++),date,desc,amount,guess});
+  add('2026-10-24','ACME CORP PAYROLL PPD',2400,'Income');
+  add('2026-10-22','GEICO *AUTO',-142,'Transportation');
+  add('2026-10-21',"TRADER JOE'S #552",-64.18,'Groceries');
+  add('2026-10-21','POS 1021 CORNER STORE',-12.6,null);
+  add('2026-10-19','TST* HOLY GELATO',-9.75,null);
+  add('2026-10-18','COMCAST XFINITY',-79.99,'Utilities');
+  add('2026-10-17','ZELLE FROM M CHEN',45,null);
+  add('2026-10-15','PAYPAL *ETSY INC',-34.18,null);
+  add('2026-10-14','PG&E WEB ONLINE',-96.31,'Utilities');
+  add('2026-10-13','CHECKCARD 1013 BLDG SUPPLY CO',-87.42,null);
+  add('2026-10-12','VENMO *J PARK',-60,null);
+  add('2026-10-11','SQ *MISSION FARMERS MKT',-23.5,null);
+  add('2026-10-12','ONLINE TRANSFER TO SAV 4410',-250,'Transfer');
+  add('2026-10-19','ONLINE TRANSFER TO SAV 4410',-250,'Transfer');
+  add('2026-10-16','USPS PO 0532',-9.85,'Shopping');
+  [[GRO,4,22,60,'Groceries'],[DIN,8,5.5,22,'Dining'],[TRN,9,3,12,'Transportation'],[SHO,3,12,40,'Shopping'],[ENT,2,11,24,'Entertainment']].forEach(([pl,n,a,b,c])=>{for(let i=0;i<n;i++)add(ds(2026,10,11+Math.floor(r()*8)),pick(pl),-R(a,b),c);});
+  rows.sort(byDate);
+  let bal=4812.33;
+  const raw=rows.slice(0,5).map(t=>{const line=[t.amount>0?'CREDIT':'DEBIT',t.date.slice(5,7)+'/'+t.date.slice(8,10)+'/'+t.date.slice(0,4),t.desc,t.amount.toFixed(2),t.amount>0?'ACH_CREDIT':(/GEICO|PG&E|COMCAST/.test(t.desc)?'ACH_DEBIT':'DEBIT_CARD'),bal.toLocaleString('en-US',{minimumFractionDigits:2}),''];bal-=t.amount;return line;});
+  return{rows,raw};
+}
+const SAMPLE=genSample(),IMPORT=genImport();
+const budgets0=()=>{const b={};for(let m=1;m<=10;m++)b['2026-'+pad(m)]=Object.assign({},BUDGET0);return b;};
+function occ(it,from,to){const out=[];if(from>to)return out;
+  if(it.freq==='biweekly'){let d=it.anchor;while(d>from)d=addDays(d,-14);while(d<=to){if(d>=from)out.push(d);d=addDays(d,14);}}
+  else{const [ay,am,ad]=it.anchor.split('-').map(Number);const st=it.freq==='yearly'?12:1;for(let k=-40;k<=40;k++){const t=am-1+k*st;const y=ay+Math.floor(t/12),m=((t%12)+12)%12+1;const d=ds(y,m,Math.min(ad,dim(y,m)));if(d>=from&&d<=to)out.push(d);}}
+  return out;}
+function merchantKey(desc){return desc.toUpperCase().replace(/\s+#\s*\d+.*$/,'').replace(/\s+\d{3,}$/,'').replace(/\*[A-Z0-9]{4,}$/,'').trim();}
+function parsePreview(map,sign){
+  const iD=map.indexOf('Date'),iS=map.indexOf('Description'),iA=map.indexOf('Amount'),iDb=map.indexOf('Debit'),iCr=map.indexOf('Credit');
+  if(iD<0)return{issue:'Choose which column holds the date.'};
+  if(iS<0)return{issue:'Choose which column holds the description.'};
+  if(sign==='sep'&&(iDb<0||iCr<0))return{issue:'Mark one column as Debit (money out) and one as Credit (money in) — or pick a different option above.'};
+  if(sign!=='sep'&&iA<0)return{issue:'Choose which column holds the amount.'};
+  const num=x=>parseFloat(String(x).replace(/[$,\s]/g,''));const rows=[];
+  for(const r of IMPORT.raw){const dm=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(r[iD]);if(!dm)return{issue:'The Date column doesn’t contain dates. Try a different column.'};
+    let v;if(sign==='sep'){const db=num(r[iDb]),cr=num(r[iCr]);if(isNaN(db)&&isNaN(cr))return{issue:'The Debit and Credit columns don’t contain amounts.'};v=(isNaN(cr)?0:Math.abs(cr))-(isNaN(db)?0:Math.abs(db));}
+    else{const a=num(r[iA]);if(isNaN(a))return{issue:'The Amount column doesn’t contain numbers. Try a different column.'};v=sign==='pos'?-a:a;}
+    rows.push({date:MS[+dm[1]-1]+' '+(+dm[2]),desc:r[iS],v});}
+  return{rows};}
+function dataFor(empty){
+  const base={imported:false,formatSaved:false,importStep:1,reviewCats:{},showDupes:false,prompt:null,lastImport:null,fileName:'Chase_Activity_20261024.CSV',fileCount:1,map:MAP0.slice(),sign:'neg',remember:true,newAcctName:'Chase Checking',newAcctType:'Checking',q:'',fAcct:'all',fCat:'all',editRule:null,catDraft:{},recognized:false,picker:null,cats:CATS0.map(c=>Object.assign({},c))};
+  if(empty)return Object.assign(base,{tx:[],rules:[],recurring:[],accounts:[],imports:[],budgets:{},acctChoice:'new',firstRunData:true});
+  return Object.assign(base,{tx:SAMPLE.tx.map(t=>Object.assign({},t)),rules:RULES0.map(r=>Object.assign({},r)),recurring:REC0.map(r=>Object.assign({},r)),accounts:ACC0.map(a=>Object.assign({},a)),imports:IMP0.slice(),budgets:budgets0(),acctChoice:'chase',firstRunData:false});
+}
+const segOn={bg:'var(--surface)',color:'var(--ink)',shadow:'0 1px 2px rgba(0,0,0,.12)'},segOff={bg:'transparent',color:'var(--ink-2)',shadow:'none'};
+const seg=(opts,cur,fn)=>opts.map(([v,l])=>Object.assign({label:l,pick:()=>fn(v)},v===cur?segOn:segOff));
+const radio=on=>on?{border:'var(--accent)',bg:'var(--accent-soft)',ring:'var(--accent)',dot:'var(--accent)'}:{border:'var(--line)',bg:'var(--surface)',ring:'var(--line-strong)',dot:'transparent'};
+const tog=on=>({trackBg:on?'var(--accent)':'var(--track-strong)',knobX:on?16:2});
+
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    this.fileRef=React.createRef();
+    this.state=Object.assign({screen:props.startScreen||'dashboard',ym:{y:2026,m:10},theme:props.theme||'light',narrow:false,toast:null,hoverBar:null,dragOver:false,recPanel:false,recForm:null,recErr:'',newCat:''},dataFor(!!props.firstRun));
+  }
+  componentDidMount(){this.onResize=()=>{const n=window.innerWidth<1100;if(n!==this.state.narrow)this.setState({narrow:n});};this.onResize();window.addEventListener('resize',this.onResize);}
+  componentWillUnmount(){window.removeEventListener('resize',this.onResize);clearTimeout(this.tt);}
+  componentDidUpdate(pp){const p=this.props;if(pp.firstRun!==p.firstRun)this.setState(dataFor(!!p.firstRun));if(pp.theme!==p.theme&&p.theme)this.setState({theme:p.theme});if(pp.startScreen!==p.startScreen&&p.startScreen)this.setState({screen:p.startScreen});}
+  toastMsg(t){clearTimeout(this.tt);this.setState({toast:t});this.tt=setTimeout(()=>this.setState({toast:null}),3400);}
+  go(screen,extra){this.setState(Object.assign({screen,picker:null,prompt:null},extra||{}));try{window.scrollTo(0,0);}catch(e){}}
+  openPicker(e,cfg){const r=e.currentTarget.getBoundingClientRect();const h=Math.min(cfg.options.length*34+12,340);let top=r.bottom+4;if(top+h>window.innerHeight-8)top=Math.max(8,r.top-h-4);const w=Math.max(r.width,200);const left=Math.max(8,Math.min(r.left,window.innerWidth-w-8));this.setState({picker:Object.assign({},cfg,{top,left,minW:w,maxH:h})});}
+  catOpts(){return this.state.cats.map(c=>({value:c.name,label:c.name,color:c.color}));}
+  matchRule(desc){const u=desc.toUpperCase();return this.state.rules.find(r=>r.merchant&&u.includes(r.merchant.toUpperCase()));}
+  setTxCat(t,cat){this.setState(s=>{const tx=s.tx.map(x=>x.id===t.id?Object.assign({},x,{cat}):x);let prompt=null;if(cat!=='Uncategorized'&&cat!==t.cat){const key=merchantKey(t.desc);if(!s.rules.some(r=>r.merchant.toUpperCase()===key&&r.cat===cat))prompt={txId:t.id,merchant:key,cat};}return{tx,prompt};});}
+  createRule(){const p=this.state.prompt;if(!p)return;let n=0;
+    this.setState(s=>{const rules=s.rules.filter(r=>r.merchant.toUpperCase()!==p.merchant).concat([{id:'r'+Date.now(),merchant:p.merchant,cat:p.cat}]);const tx=s.tx.map(t=>{if(t.id!==p.txId&&t.cat==='Uncategorized'&&t.desc.toUpperCase().includes(p.merchant)){n++;return Object.assign({},t,{cat:p.cat});}return t;});return{rules,tx,prompt:null};},()=>this.toastMsg('Rule created: '+p.merchant+' → '+p.cat+(n?' · applied to '+n+' more':'')));}
+  shiftMonth(d){this.setState(s=>{let {y,m}=s.ym;m+=d;if(m<1){m=12;y--;}if(m>12){m=1;y++;}if(y!==2026)return null;return{ym:{y,m},prompt:null};});}
+  startImport(files){const f=files&&files.length?files:null;
+    this.setState(s=>{const ch=s.accounts.length?(s.accounts.find(a=>/chase/i.test(a.name))||s.accounts[0]).id:'new';return{dragOver:false,fileName:f?f[0].name:'Chase_Activity_20261024.CSV',fileCount:f?f.length:1,importStep:s.formatSaved?3:2,recognized:s.formatSaved,reviewCats:{},showDupes:false,acctChoice:ch};});}
+  dupesList(){const s=this.state;const base=s.firstRunData?[]:SAMPLE.dupes;return s.imported?IMPORT.rows.concat(base):base;}
+  reviewRows(){const s=this.state;if(s.imported)return[];return IMPORT.rows.map(r=>{const rule=this.matchRule(r.desc);const over=s.reviewCats[r.id];return Object.assign({},r,{cat:over||(rule?rule.cat:(r.guess||'Uncategorized')),rule:!over&&!!rule,ruleText:rule?rule.merchant:''});});}
+  doImport(){const s=this.state;const rows=this.reviewRows();if(!rows.length)return;
+    let accounts=s.accounts.slice();let acctId=s.acctChoice;
+    if(acctId==='new'||!accounts.find(a=>a.id===acctId)){acctId='a'+Date.now();accounts.push({id:acctId,name:(s.newAcctName||'New account').trim(),type:s.newAcctType,format:null,last:null});}
+    accounts=accounts.map(a=>a.id===acctId?Object.assign({},a,{last:TODAY,format:s.remember?'Chase · 7 columns':a.format}):a);
+    const acctNm=accounts.find(a=>a.id===acctId).name;
+    const newTx=rows.map(r=>({id:'x'+r.id,date:r.date,desc:r.desc,account:acctId,cat:r.cat,amount:r.amount}));
+    const matched=[];s.recurring.filter(it=>it.active).forEach(it=>occ(it,'2026-10-11','2026-10-24').forEach(d=>{const hit=t=>t.desc.toUpperCase().includes(it.match)&&Math.abs(dayNum(t.date)-dayNum(d))<=4;if(newTx.some(hit)&&!s.tx.some(hit))matched.push(it.name+' ('+fd(d)+')');}));
+    const dupN=this.dupesList().length;
+    this.setState({tx:newTx.concat(s.tx).sort(byDate),accounts,imported:true,formatSaved:s.remember||s.formatSaved,importStep:4,imports:[{file:s.fileName,acct:acctNm,date:TODAY,newN:rows.length,skip:dupN}].concat(s.imports),lastImport:{n:rows.length,uncat:rows.filter(r=>r.cat==='Uncategorized').length,acct:acctNm,dup:dupN,matched},ym:{y:2026,m:10}});}
+  setMap(i,v){this.setState(s=>{const map=s.map.slice();if(v!=='Ignore')map.forEach((x,j)=>{if(x===v&&j!==i)map[j]='Ignore';});map[i]=v;return{map};});}
+  openRec(){this.setState(s=>({recPanel:true,recErr:'',recForm:{name:'',amount:'',kind:'expense',cat:'Subscriptions',account:(s.accounts[0]||{}).id||'',freq:'monthly',next:'2026-11-01',match:'',matchTouched:false}}));}
+  setRF(k,v){this.setState(s=>{const f=Object.assign({},s.recForm,{[k]:v});if(k==='name'&&!f.matchTouched)f.match=v.toUpperCase();if(k==='match')f.matchTouched=true;if(k==='kind')f.cat=v==='income'?'Income':(f.cat==='Income'?'Subscriptions':f.cat);return{recForm:f,recErr:''};});}
+  saveRec(){const f=this.state.recForm;const a=parseFloat(String(f.amount).replace(/[$,]/g,''));
+    if(!f.name.trim())return this.setState({recErr:'Give it a name.'});
+    if(!(a>0))return this.setState({recErr:'Enter an amount greater than $0.'});
+    if(!f.next)return this.setState({recErr:'Pick the next date.'});
+    const it={id:'rc'+Date.now(),name:f.name.trim(),amount:f.kind==='income'?a:-a,cat:f.cat,account:f.account,freq:f.freq,anchor:f.next,match:(f.match||f.name).toUpperCase().trim(),active:true};
+    this.setState(s=>({recurring:s.recurring.concat([it]),recPanel:false}),()=>this.toastMsg(it.name+' added · next on '+fdl(it.anchor)));}
+  renameCat(old,nw){nw=(nw||'').trim();this.setState(s=>{const d=Object.assign({},s.catDraft);delete d[old];if(!nw||nw===old||s.cats.some(c=>c.name===nw))return{catDraft:d};const R=x=>x===old?nw:x;const budgets={};Object.keys(s.budgets).forEach(k=>{const b=Object.assign({},s.budgets[k]);if(old in b){b[nw]=b[old];delete b[old];}budgets[k]=b;});return{catDraft:d,cats:s.cats.map(c=>c.name===old?Object.assign({},c,{name:nw}):c),tx:s.tx.map(t=>t.cat===old?Object.assign({},t,{cat:nw}):t),rules:s.rules.map(r=>Object.assign({},r,{cat:R(r.cat)})),recurring:s.recurring.map(r=>Object.assign({},r,{cat:R(r.cat)})),budgets,fCat:R(s.fCat)};});}
+  addCat(){const n=(this.state.newCat||'').trim();if(!n||this.state.cats.some(c=>c.name.toLowerCase()===n.toLowerCase()))return;this.setState(s=>{const cats=s.cats.slice();const idx=cats.findIndex(c=>c.name==='Income');cats.splice(idx<0?cats.length:idx,0,{name:n,color:SW[cats.length%8][1]});return{cats,newCat:''};},()=>this.toastMsg('Added '+n));}
+  saveRule(){const e=this.state.editRule;if(!e||!e.merchant.trim())return;this.setState(s=>({rules:s.rules.map(r=>r.id===e.id?{id:r.id,merchant:e.merchant.trim().toUpperCase(),cat:e.cat}:r),editRule:null}),()=>this.toastMsg('Rule saved'));}
+  delRule(id){this.setState(s=>({rules:s.rules.filter(r=>r.id!==id),editRule:null}),()=>this.toastMsg('Rule deleted'));}
+  copyBudgets(){const {y,m}=this.state.ym;let py=y,pm=m-1;if(pm<1){pm=12;py--;}const src=this.state.budgets[py+'-'+pad(pm)];const k=y+'-'+pad(m);if(!src||!Object.keys(src).length)return this.toastMsg('No budgets in '+MONTHS[pm-1]+' to copy');this.setState(s=>({budgets:Object.assign({},s.budgets,{[k]:Object.assign({},src)})}),()=>this.toastMsg('Copied '+Object.keys(src).length+' budgets from '+MONTHS[pm-1]));}
+  setBudget(cat,v){v=v.replace(/[^0-9.]/g,'');const {y,m}=this.state.ym;const k=y+'-'+pad(m);this.setState(s=>({budgets:Object.assign({},s.budgets,{[k]:Object.assign({},s.budgets[k]||{},{[cat]:v})})}));}
+
+  renderVals(){
+    const s=this.state;const {y,m}=s.ym;const mkey=y+'-'+pad(m);const MN=MONTHS[m-1];
+    const catMap={};s.cats.forEach(c=>catMap[c.name]=c);
+    const excl=new Set(s.cats.filter(c=>c.excluded).map(c=>c.name));
+    const colorOf=n=>(catMap[n]||{}).color||'var(--ink-3)';
+    const acctName=id=>(s.accounts.find(a=>a.id===id)||{}).name||'—';
+    const totals=list=>{let inc=0,sp=0;list.forEach(t=>{if(excl.has(t.cat))return;if(t.cat==='Income')inc+=t.amount;else sp-=t.amount;});return{inc,sp};};
+    const inMonth=k=>s.tx.filter(t=>t.date.slice(0,7)===k);
+    const mTx=inMonth(mkey);const T=totals(mTx);const hasData=s.tx.length>0;
+    const amtView=t=>excl.has(t.cat)?{amt:(t.amount>0?'+':'')+money(t.amount),color:'var(--ink-3)'}:t.amount>0?{amt:'+'+money(t.amount),color:'var(--pos)'}:{amt:money(t.amount),color:'var(--ink)'};
+    const recAmt=a=>a>0?{amt:'+'+money(a),color:'var(--pos)'}:{amt:money(a),color:'var(--ink)'};
+    const uncatN=mTx.filter(t=>t.cat==='Uncategorized').length;
+    const go=(sc,extra)=>()=>this.go(sc,extra);
+    const NAV=[['dashboard','Dashboard'],['transactions','Transactions'],['import','Import'],['budgets','Budgets'],['recurring','Recurring'],['settings','Settings']];
+    const nav=NAV.map(([k,l])=>{const on=s.screen===k;return{label:l,go:go(k),bg:on?'var(--surface-2)':'transparent',color:on?'var(--ink)':'var(--ink-2)',weight:on?500:400,hasBadge:k==='transactions'&&uncatN>0,badge:uncatN};});
+
+    const spendBy={};mTx.forEach(t=>{if(excl.has(t.cat)||t.cat==='Income')return;spendBy[t.cat]=(spendBy[t.cat]||0)-t.amount;});
+    const cs=Object.entries(spendBy).filter(e=>e[1]>0.004).sort((a,b)=>b[1]-a[1]);const maxCS=cs.length?cs[0][1]:1;
+    const catBars=cs.map(([n,v])=>({name:n,color:colorOf(n),w:Math.max(2,v/maxCS*100).toFixed(1),amt:money(v)}));
+    const bm=s.budgets[mkey]||{};
+    const budgetCats=s.cats.filter(c=>!c.excluded&&c.name!=='Income'&&c.name!=='Uncategorized');
+    const bstat=n=>{const b=parseFloat(bm[n])||0,sp=Math.max(0,spendBy[n]||0);const pct=b>0?sp/b:0;const over=b>0&&sp>b+0.004,near=!over&&b>0&&pct>=0.85;return{b,sp,pct,over,near};};
+    const barColor=st=>st.over?'var(--neg)':st.near?'var(--warn)':'var(--accent)';
+    const dBudgets=budgetCats.filter(c=>bstat(c.name).b>0).map(c=>{const st=bstat(c.name);return{name:c.name,spent:money(st.sp),budget:money(st.b),spentColor:st.over?'var(--neg)':'var(--ink)',w:Math.min(100,st.pct*100).toFixed(1),bar:barColor(st),hasNote:st.over||st.near,note:st.over?'Over by '+money(st.sp-st.b):money(st.b-st.sp)+' left',noteColor:st.over?'var(--neg)':'var(--warn-ink)'};});
+
+    const matchTx=(it,d)=>s.tx.some(t=>t.desc.toUpperCase().includes(it.match)&&Math.abs(dayNum(t.date)-dayNum(d))<=4&&Math.sign(t.amount)===Math.sign(it.amount));
+    const active=s.recurring.filter(r=>r.active);
+    const mStart=ds(y,m,1),mEnd=ds(y,m,dim(y,m));
+    const expected=[];active.forEach(it=>occ(it,mStart,mEnd<TODAY?mEnd:TODAY).forEach(d=>{if(!matchTx(it,d))expected.push({it,d});}));
+    expected.sort((a,b)=>a.d.localeCompare(b.d));
+    const expInc=expected.filter(e=>e.it.amount>0).reduce((a,e)=>a+e.it.amount,0);
+    const expSp=expected.filter(e=>e.it.amount<0).reduce((a,e)=>a-e.it.amount,0);
+    const dateBox=d=>{const p=d.split('-').map(Number);return{mon:MS[p[1]-1].toUpperCase(),day:p[2]};};
+    const nextOf=it=>occ(it,addDays(TODAY,1),'2028-12-31')[0];
+    const upcoming=active.map(it=>({it,d:nextOf(it)})).filter(x=>x.d).sort((a,b)=>a.d.localeCompare(b.d)).slice(0,10).map(x=>{const a=recAmt(x.it.amount);return Object.assign(dateBox(x.d),{name:x.it.name,sub:'Due '+fd(x.d)+' · '+acctName(x.it.account),amt:a.amt,amtColor:a.color});});
+    const expectedRows=expected.map(e=>{const a=recAmt(e.it.amount);return Object.assign(dateBox(e.d),{name:e.it.name,sub:'Expected '+fd(e.d)+' · '+acctName(e.it.account),amt:a.amt,amtColor:a.color});});
+
+    const cms=[];for(let i=5;i>=0;i--){let mm=m-i,yy=y;while(mm<1){mm+=12;yy--;}cms.push({y:yy,m:mm});}
+    const cd=cms.map(c=>Object.assign({},c,totals(inMonth(c.y+'-'+pad(c.m)))));
+    const maxV=Math.max(1,...cd.map(c=>Math.max(c.inc,c.sp)));
+    const stepV=Math.max(500,Math.ceil(maxV/4/500)*500),topV=stepV*4;
+    const kfmt=v=>v===0?'$0':'$'+(v/1000).toFixed(v%1000?1:0)+'k';
+    const gridLines=[0,1,2,3,4].map(i=>({pct:i*25,label:kfmt(stepV*i)}));
+    const hb=s.hoverBar;
+    const chart=cd.map((c,i)=>{const sel=c.y===y&&c.m===m;return{label:MS[c.m-1],incH:(c.inc/topV*100).toFixed(1),spH:(Math.max(0,c.sp)/topV*100).toFixed(1),op:sel||hb===i?1:0.45,labelColor:sel?'var(--ink)':'var(--ink-3)',labelWeight:sel?600:400,enter:()=>this.setState({hoverBar:i}),select:()=>{if(c.y===2026)this.setState({ym:{y:c.y,m:c.m}});}};});
+    const cc=cd[hb==null?5:hb];
+    const net=T.inc-T.sp;
+
+    const qq=s.q.trim().toUpperCase();
+    const txList=mTx.filter(t=>(s.fAcct==='all'||t.account===s.fAcct)&&(s.fCat==='all'||t.cat===s.fCat)&&(!qq||t.desc.toUpperCase().includes(qq)));
+    const TT=totals(txList);
+    const txRows=txList.map(t=>{const a=amtView(t);const u=t.cat==='Uncategorized';return{date:fd(t.date),desc:t.desc,acct:acctName(t.account),cat:t.cat,catColor:colorOf(t.cat),catBorder:u?'var(--warn)':'transparent',catBg:u?'var(--surface)':'transparent',bg:u?'var(--hl)':'transparent',amt:a.amt,amtColor:a.color,showPrompt:!!(s.prompt&&s.prompt.txId===t.id),openCat:e=>this.openPicker(e,{options:this.catOpts(),current:t.cat,onPick:v=>this.setTxCat(t,v)})};});
+    const filtersActive=s.fAcct!=='all'||s.fCat!=='all'||!!qq;
+    const clearFilters=()=>this.setState({fAcct:'all',fCat:'all',q:''});
+    let txE;
+    if(!hasData)txE={t:'No transactions yet',b:'Import a CSV export from your bank and your transactions will show up here.',btn:'Import a statement',act:go('import')};
+    else if(filtersActive&&s.fCat==='Uncategorized'&&!qq)txE={t:'All caught up',b:'Every '+MN+' transaction has a category.',btn:'Show all transactions',act:clearFilters};
+    else if(filtersActive)txE={t:'Nothing matches',b:'No '+MN+' transactions match these filters.',btn:'Clear filters',act:clearFilters};
+    else txE={t:'No transactions in '+MN+' '+y,b:'Import a newer statement, or pick another month above.',btn:'Import a statement',act:go('import')};
+    let promptExtra='';if(s.prompt){const n=s.tx.filter(t=>t.id!==s.prompt.txId&&t.cat==='Uncategorized'&&t.desc.toUpperCase().includes(s.prompt.merchant)).length;if(n)promptExtra='Also fixes '+n+' other uncategorized transaction'+(n>1?'s':'')+'.';}
+
+    const stepDefs=['Upload','Set up file','Review','Done'];
+    const steps=stepDefs.map((l,i)=>{const n=i+1,cur=s.importStep===n,done=s.importStep>n;return{label:l,line:i>0,go:()=>this.setState({importStep:n}),mark:done?'✓':String(n),circleBg:cur?'var(--accent)':done?'var(--accent-soft)':'var(--surface)',circleColor:cur?'var(--accent-ink)':done?'var(--accent)':'var(--ink-3)',circleBorder:cur||done?'var(--accent)':'var(--line-strong)',labelColor:cur?'var(--ink)':'var(--ink-2)',weight:cur?600:400};});
+    const preview=parsePreview(s.map,s.sign);
+    const mapCols=s.map.map((v,i)=>{const on=v!=='Ignore';return{label:v,bg:on?'var(--accent-soft)':'var(--surface)',border:on?'var(--accent)':'var(--line)',color:on?'var(--accent)':'var(--ink-3)',open:e=>this.openPicker(e,{options:MAPT.map(x=>({value:x,label:x})),current:v,onPick:x=>this.setMap(i,x)})};});
+    const rawHead=RAW_HEAD.map((h,i)=>({text:h,color:s.map[i]==='Ignore'?'var(--ink-3)':'var(--ink-2)'}));
+    const rawRows=IMPORT.raw.map(r=>({cells:r.map((c,i)=>({text:c,color:s.map[i]==='Ignore'?'var(--ink-3)':'var(--ink)'}))}));
+    const signOpts=[['neg','Purchases are negative','e.g. −64.18 for groceries · detected in this file'],['pos','Purchases are positive','Common on credit card exports'],['sep','Separate debit and credit columns','One column for money out, one for money in']].map(([v,l,sub])=>Object.assign({label:l,sub,pick:()=>this.setState({sign:v})},radio(s.sign===v)));
+    const pv=preview.rows||[];const incN=pv.filter(p=>p.v>0).length,spN=pv.length-incN;const pvWarn=!preview.issue&&incN>spN;
+    const pvRows=pv.map(p=>({date:p.date,desc:p.desc,amt:p.v>0?'+'+money(p.v):money(p.v),amtColor:p.v>0?'var(--pos)':'var(--ink)',kind:p.v>0?'Income':'Spending',kindBg:p.v>0?'var(--pos-soft)':'var(--surface-2)',kindColor:p.v>0?'var(--pos)':'var(--ink-2)'}));
+    const pvMsg=preview.issue?preview.issue:pvWarn?incN+' of '+pv.length+' rows come out as income. If those are purchases, choose “Purchases are negative”.':'✓ Looks right — '+spN+' purchases come out as spending, '+incN+' deposit'+(incN===1?'':'s')+' as income.';
+    const pvBad=!!preview.issue||pvWarn;
+    const acctOpts=s.accounts.map(a=>Object.assign({label:a.name,sub:/chase/i.test(a.name)?'Detected from file name':a.type,pick:()=>this.setState({acctChoice:a.id})},radio(s.acctChoice===a.id))).concat([Object.assign({label:'New account',sub:'Create one for this file',pick:()=>this.setState({acctChoice:'new'})},radio(s.acctChoice==='new'))]);
+    const acctValid=s.acctChoice!=='new'||!!s.newAcctName.trim();
+    const reviewDisabled=!!preview.issue||!acctValid;
+    const chosenName=s.acctChoice==='new'?(s.newAcctName.trim()||'this account'):acctName(s.acctChoice);
+    const rrows=this.reviewRows(),dup=this.dupesList();const need=rrows.filter(r=>r.cat==='Uncategorized').length;
+    const reviewRows=rrows.map(r=>{const u=r.cat==='Uncategorized';const a=r.amount>0?{amt:'+'+money(r.amount),color:'var(--pos)'}:{amt:money(r.amount),color:'var(--ink)'};return{date:fd(r.date),desc:r.desc,catLabel:r.cat,catColor:colorOf(r.cat),catBorder:u?'var(--warn)':'transparent',catBg:u?'var(--surface)':'transparent',bg:u?'var(--hl)':'transparent',rule:r.rule,ruleTitle:'Matched rule: '+r.ruleText,amt:a.amt,amtColor:a.color,openCat:e=>this.openPicker(e,{options:this.catOpts(),current:r.cat,onPick:v=>this.setState(st=>({reviewCats:Object.assign({},st.reviewCats,{[r.id]:v})}))})};});
+    const li=s.lastImport||{n:41,uncat:7,acct:'Chase Checking',dup:18,matched:[]};
+
+    const tb=budgetCats.reduce((a,c)=>a+(parseFloat(bm[c.name])||0),0);
+    const tsp=budgetCats.reduce((a,c)=>a+Math.max(0,spendBy[c.name]||0),0);
+    const tst={over:tb>0&&tsp>tb,near:tb>0&&tsp<=tb&&tsp/tb>=0.85};
+    const noBudgets=!Object.keys(bm).some(k=>parseFloat(bm[k])>0);
+    const budgetRows=budgetCats.map(c=>{const st=bstat(c.name);return{name:c.name,color:c.color,val:bm[c.name]||'',set:e=>this.setBudget(c.name,e.target.value),spent:money(st.sp),remain:st.b?(st.over?'−'+money(st.sp-st.b):money(st.b-st.sp)):'—',remColor:st.over?'var(--neg)':'var(--ink)',w:st.b?Math.min(100,st.pct*100).toFixed(1):0,bar:barColor(st),pct:st.b?Math.round(st.pct*100)+'%':''};});
+
+    const recRows=s.recurring.map(it=>{const a=recAmt(it.amount);const past=occ(it,addDays(TODAY,-45),TODAY);const last=past[past.length-1];const nx=nextOf(it);let st;
+      if(!it.active)st={t:'Paused',b:'solid',c:'var(--ink-3)',bg:'transparent'};
+      else if(!last)st={t:'Nothing due yet',b:'solid',c:'var(--ink-3)',bg:'transparent'};
+      else if(matchTx(it,last))st={t:'✓ Received '+fd(last),b:'solid',c:'var(--ink-2)',bg:'var(--surface-2)'};
+      else st={t:'Expected '+fd(last)+' · not imported',b:'dashed',c:'var(--ink-2)',bg:'transparent'};
+      return Object.assign({name:it.name,match:'matches “'+it.match+'”',amt:a.amt,amtColor:a.color,cat:it.cat,color:colorOf(it.cat),acct:acctName(it.account),freq:FREQ[it.freq],next:nx?fd(nx):'—',status:st.t,stBorder:st.b,stColor:st.c,stBg:st.bg,op:it.active?1:0.55,toggle:()=>this.setState(ss=>({recurring:ss.recurring.map(r=>r.id===it.id?Object.assign({},r,{active:!r.active}):r)}))},tog(it.active));});
+    const f=s.recForm||{};
+    const rf={name:f.name||'',amount:f.amount||'',match:f.match||'',next:f.next||'',cat:f.cat||'',catColor:colorOf(f.cat),acct:f.account?acctName(f.account):'Choose…',
+      setName:e=>this.setRF('name',e.target.value),setAmount:e=>this.setRF('amount',e.target.value.replace(/[^0-9.,]/g,'')),setMatch:e=>this.setRF('match',e.target.value),setNext:e=>this.setRF('next',e.target.value),
+      openCat:e=>this.openPicker(e,{options:this.catOpts().filter(o=>o.value!=='Uncategorized'),current:f.cat,onPick:v=>this.setRF('cat',v)}),
+      openAcct:e=>this.openPicker(e,{options:s.accounts.map(a=>({value:a.id,label:a.name})),current:f.account,onPick:v=>this.setRF('account',v)})};
+
+    const catRows=s.cats.map(c=>{const n=s.tx.filter(t=>t.cat===c.name).length;return Object.assign({color:c.color,val:s.catDraft[c.name]!=null?s.catDraft[c.name]:c.name,locked:!!c.locked,note:(c.locked?'Built-in · ':'')+n+' transaction'+(n===1?'':'s'),canExclude:c.name!=='Income'&&c.name!=='Uncategorized',
+      setVal:e=>{const v=e.target.value;this.setState(ss=>({catDraft:Object.assign({},ss.catDraft,{[c.name]:v})}));},
+      commit:e=>this.renameCat(c.name,e.target.value),
+      onKey:e=>{if(e.key==='Enter')e.target.blur();},
+      toggleExcl:()=>this.setState(ss=>({cats:ss.cats.map(x=>x.name===c.name?Object.assign({},x,{excluded:!x.excluded}):x)})),
+      openColor:e=>this.openPicker(e,{options:SW.map(([l,col])=>({value:col,label:l,color:col})),current:c.color,onPick:v=>this.setState(ss=>({cats:ss.cats.map(x=>x.name===c.name?Object.assign({},x,{color:v}):x)}))})},tog(!!c.excluded));});
+    const er=s.editRule;
+    const ruleRows=s.rules.map(r=>{const ed=!!(er&&er.id===r.id);return{merchant:r.merchant,cat:r.cat,color:colorOf(r.cat),editing:ed,notEditing:!ed,edit:()=>this.setState({editRule:{id:r.id,merchant:r.merchant,cat:r.cat}}),del:()=>this.delRule(r.id),draftMerchant:ed?er.merchant:'',draftCat:ed?er.cat:'',draftColor:ed?colorOf(er.cat):'',
+      setDraft:ev=>{const v=ev.target.value;this.setState(ss=>({editRule:Object.assign({},ss.editRule,{merchant:v})}));},
+      openCat:ev=>this.openPicker(ev,{options:this.catOpts(),current:ed?er.cat:r.cat,onPick:v=>this.setState(ss=>({editRule:Object.assign({},ss.editRule,{cat:v})}))}),
+      save:()=>this.saveRule(),cancel:()=>this.setState({editRule:null})};});
+    const P=s.picker;
+    const pk=P?{open:true,top:P.top,left:P.left,minW:P.minW,maxH:P.maxH,close:()=>this.setState({picker:null}),options:P.options.map(o=>({label:o.label,color:o.color||'transparent',dot:o.color?'block':'none',check:o.value===P.current?'✓':'',bg:o.value===P.current?'var(--surface-2)':'transparent',pick:()=>{this.setState({picker:null});P.onPick(o.value);}}))}:{open:false,options:[]};
+
+    return {
+      theme:s.theme,wide:!s.narrow,narrow:s.narrow,nav,
+      toggleTheme:()=>this.setState({theme:s.theme==='dark'?'light':'dark'}),themeLabel:s.theme==='dark'?'Light mode':'Dark mode',
+      prevMonth:()=>this.shiftMonth(-1),nextMonth:()=>this.shiftMonth(1),prevDisabled:m===1,nextDisabled:m===12,prevOp:m===1?0.35:1,nextOp:m===12?0.35:1,
+      monthLabel:MN+' '+y,monthShort:MN+' '+y,showThisMonth:!(y===2026&&m===10),goThisMonth:()=>this.setState({ym:{y:2026,m:10}}),
+      isDash:s.screen==='dashboard',dashH:'auto',dashMinH:'0',rowFlexA:s.narrow?'none':'0 0 380px',rowFlexB:'none',rowMinH:s.narrow?'auto':'0',rowWrap:s.narrow?'wrap':'nowrap',chartMinH:'240px',scrollMaxH:s.narrow?'360px':'none',dashEmpty:!hasData,dashFull:hasData,goImport:go('import'),goRecurring:go('recurring'),goBudgets:go('budgets'),goDashboard:go('dashboard'),
+      dashSub:MN+' '+y+' · Transfers aren’t counted in any total',
+      dIncome:money(T.inc),dIncomeSub:expInc?'+'+money(expInc)+' expected, not imported yet':mTx.filter(t=>t.cat==='Income').length+' deposits',
+      dSpent:money(T.sp),dSpentSub:expSp?'+'+money(expSp)+' expected, not imported yet':mTx.filter(t=>!excl.has(t.cat)&&t.cat!=='Income').length+' transactions',
+      dNet:(net<0?'−':net>0?'+':'')+money(net),dNetSub:T.inc>0?(net>=0?Math.round(net/T.inc*100)+'% of income kept':'Spent more than came in'):'',
+      uncatCount:String(uncatN),uncatSub:uncatN?'Review in Transactions →':'All categorized',uncatBg:uncatN?'var(--hl)':'var(--surface)',uncatBorder:uncatN?'var(--warn)':'var(--line)',uncatColor:uncatN?'var(--warn-ink)':'var(--ink)',
+      goUncat:go('transactions',{fCat:'Uncategorized',fAcct:'all',q:''}),
+      chart,gridLines,chartCaption:MONTHS[cc.m-1]+' — income '+money(cc.inc)+' · spending '+money(cc.sp),clearHover:()=>this.setState({hoverBar:null}),
+      hasExpected:expectedRows.length>0,expected:expectedRows,upcoming,noUpcoming:!upcoming.length,
+      catBars,noCatBars:!catBars.length,noMonthText:'No spending recorded in '+MN+' yet.',dBudgets,noDBudgets:!dBudgets.length,
+      isTx:s.screen==='transactions',q:s.q,setQ:e=>this.setState({q:e.target.value,prompt:null}),
+      fAcctLabel:s.fAcct==='all'?'All accounts':acctName(s.fAcct),fCatLabel:s.fCat==='all'?'All categories':s.fCat,fCatBorder:s.fCat!=='all'?'var(--accent)':'var(--line-strong)',
+      openAcctFilter:e=>this.openPicker(e,{options:[{value:'all',label:'All accounts'}].concat(s.accounts.map(a=>({value:a.id,label:a.name}))),current:s.fAcct,onPick:v=>this.setState({fAcct:v})}),
+      openCatFilter:e=>this.openPicker(e,{options:[{value:'all',label:'All categories'}].concat(this.catOpts()),current:s.fCat,onPick:v=>this.setState({fCat:v})}),
+      filtersActive,clearFilters,txSummary:hasData?txList.length+' transactions · '+money(TT.sp)+' spent · '+money(TT.inc)+' income':'Nothing imported yet',
+      txRows,hasTxRows:txRows.length>0,txEmpty:!txRows.length,txEmptyTitle:txE.t,txEmptyBody:txE.b,txEmptyBtn:txE.btn,txEmptyAction:txE.act,
+      prompt:{merchant:s.prompt?s.prompt.merchant:'',cat:s.prompt?s.prompt.cat:'',extra:promptExtra},createRule:()=>this.createRule(),justOnce:()=>this.setState({prompt:null}),
+      isImport:s.screen==='import',steps,isStep1:s.importStep===1,isStep2:s.importStep===2,isStep3:s.importStep===3,isStep4:s.importStep===4,
+      dropBorder:s.dragOver?'var(--accent)':'var(--line-strong)',dropBg:s.dragOver?'var(--accent-soft)':'var(--surface)',
+      onDragOver:e=>{e.preventDefault();if(!this.state.dragOver)this.setState({dragOver:true});},onDragLeave:()=>this.setState({dragOver:false}),onDrop:e=>{e.preventDefault();this.startImport(e.dataTransfer&&e.dataTransfer.files);},
+      openFile:()=>{if(this.fileRef.current)this.fileRef.current.click();},fileRef:this.fileRef,onFiles:e=>{this.startImport(e.target.files);e.target.value='';},useSample:()=>this.startImport(null),
+      recentImports:s.imports.map(i=>({file:i.file,acct:i.acct,date:fdl(i.date),newN:i.newN+' new',skip:i.skip+' skipped'})),hasImports:s.imports.length>0,noImports:!s.imports.length,
+      fileName:s.fileName,fileNote:(IMPORT.rows.length+dup.length)+' rows'+(s.fileCount>1?' · file 1 of '+s.fileCount:''),
+      acctOpts,showNewAcct:s.acctChoice==='new',newAcctName:s.newAcctName,setNewAcctName:e=>this.setState({newAcctName:e.target.value}),
+      acctTypes:seg([['Checking','Checking'],['Credit card','Credit card'],['Savings','Savings']],s.newAcctType,v=>this.setState({newAcctType:v})),
+      mapCols,rawHead,rawRows,signOpts,pvRows,pvMsg,pvMsgBg:pvBad?'var(--warn-soft)':'var(--pos-soft)',pvMsgColor:pvBad?'var(--warn-ink)':'var(--pos)',
+      remember:s.remember,toggleRemember:()=>this.setState({remember:!s.remember}),rememberLabel:'Remember this format for '+chosenName,
+      back1:()=>this.setState({importStep:1}),toReview:()=>{if(!reviewDisabled)this.setState({importStep:3,recognized:false});},reviewDisabled,reviewOp:reviewDisabled?0.45:1,
+      recognized:s.recognized,rv:{found:rrows.length+dup.length,newN:rrows.length,dupN:dup.length,needText:need?need+' need a category':'All categorized',needColor:need?'var(--warn-ink)':'var(--pos)'},
+      reviewRows,hasReviewRows:rrows.length>0,noReviewRows:!rrows.length,hasDupes:dup.length>0,showDupes:s.showDupes,dupesCaret:s.showDupes?'▾':'▸',toggleDupes:()=>this.setState({showDupes:!s.showDupes}),
+      dupRows:dup.map(t=>({date:fd(t.date),desc:t.desc,cat:t.cat||t.guess||'',amt:(t.amount>0?'+':'')+money(t.amount)})),
+      backFromReview:()=>this.setState({importStep:s.recognized?1:2}),doImport:()=>this.doImport(),importDisabled:!rrows.length,importOp:rrows.length?1:0.45,
+      importBtnLabel:rrows.length?'Import '+rrows.length+' transactions':'Nothing to import',
+      importNote:!rrows.length?'':need?need+' uncategorized rows will come in as Uncategorized — you can sort them out later.':'Everything has a category.',
+      successTitle:li.n+' transactions imported',successBody:'Added to '+li.acct+' · Oct 11 – Oct 24, 2026.'+(li.dup?' '+li.dup+' duplicates were skipped.':''),
+      hasMatched:li.matched.length>0,matchedText:'Matched expected recurring: '+li.matched.join(', '),
+      hasUncatLeft:li.uncat>0,uncatLeftText:'Categorize '+li.uncat+' remaining',reviewUncat:go('transactions',{fCat:'Uncategorized',fAcct:'all',q:'',ym:{y:2026,m:10}}),importAnother:()=>this.setState({importStep:1}),
+      isBudgets:s.screen==='budgets',copyBudgets:()=>this.copyBudgets(),copyLabel:'Copy last month’s budgets',
+      copyBorder:noBudgets?'var(--accent)':'var(--line-strong)',copyBg:noBudgets?'var(--accent)':'var(--surface)',copyColor:noBudgets?'var(--accent-ink)':'var(--ink)',
+      bTotal:money(tb),bSpent:money(tsp),bRemLabel:tst.over?'Over budget':'Remaining',bRemain:money(tb-tsp),bRemColor:tst.over?'var(--neg)':'var(--ink)',
+      bW:tb?Math.min(100,tsp/tb*100).toFixed(1):0,bBar:barColor(tst),
+      bNote:tb?Math.round(tsp/tb*100)+'% of budget used'+(mkey==='2026-10'?' · 6 days left in October':''):'No budgets set for '+MN+' yet. Copy last month’s, or type amounts below.',
+      budgetRows,
+      isRec:s.screen==='recurring',openRec:()=>this.openRec(),recRows,hasRec:recRows.length>0,noRec:!recRows.length,
+      recPanel:s.recPanel,closeRec:()=>this.setState({recPanel:false,picker:null}),rf,recErr:s.recErr,hasRecErr:!!s.recErr,saveRec:()=>this.saveRec(),
+      kindOpts:seg([['expense','Expense'],['income','Income']],f.kind,v=>this.setRF('kind',v)),freqOpts:seg(Object.entries(FREQ),f.freq,v=>this.setRF('freq',v)),
+      isSettings:s.screen==='settings',themeOpts:seg([['light','Light'],['dark','Dark']],s.theme,v=>this.setState({theme:v})),
+      acctRows:s.accounts.map(a=>({name:a.name,type:a.type,format:a.format||'Not saved — asks on next import',fmtColor:a.format?'var(--ink)':'var(--ink-3)',last:a.last?fdl(a.last):'—'})),hasAccts:s.accounts.length>0,noAccts:!s.accounts.length,
+      catRows,newCat:s.newCat,setNewCat:e=>this.setState({newCat:e.target.value}),newCatKey:e=>{if(e.key==='Enter')this.addCat();},addCat:()=>this.addCat(),
+      ruleRows,noRules:!s.rules.length,
+      eraseData:()=>{this.setState(Object.assign(dataFor(true),{screen:'dashboard'}));this.toastMsg('All data erased');},
+      loadSample:()=>{this.setState(Object.assign(dataFor(false),{screen:'dashboard'}));this.toastMsg('Sample data loaded');},
+      pk,hasToast:!!s.toast,toast:s.toast||''
+    };
+  }
+}
+</script>
+</body>
+</html>

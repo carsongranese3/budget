@@ -1,0 +1,12 @@
+node_modules
+dist
+data/*.db
+data/*.db-*
+.env
+*.csv
+!test/fixtures/*.csv
+
+# Claude Code machine-local config
+.claude/*.local.*
+.claude/.cc-writes/
+.playwright-mcp/

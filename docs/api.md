@@ -1,0 +1,321 @@
+# API contract (v1)
+
+Source of truth for the frontend and backend. Behavior: `specs/budget-v1.md`. TypeScript types for every shape below live in `shared/types.ts` (same names). If this file and `shared/types.ts` disagree, fix both.
+
+## Conventions
+
+- Base path `/api`. JSON in, JSON out (`Content-Type: application/json`). Server: Express on port **5174** (`PORT` env overrides); Vite dev server on **5173** proxies `/api` to it.
+- Field names are snake_case and match spec §3. Money is integer cents (`*_cents`), dates `YYYY-MM-DD`, months `YYYY-MM`, datetimes ISO 8601.
+- Booleans in JSON are real booleans (`excluded_from_totals`, `active`, `has_header`) even though SQLite stores 0/1.
+- `month` query/body params must match `YYYY-MM`; otherwise `400 validation`. The client picks the month (spec G5 fallback) using `GET /api/months`; the server never substitutes a month.
+- "Today" = local date of the machine running the server (spec G2).
+- Request body limit is **15 MB** (`express.json({ limit: "15mb" })`): a 10 MB CSV plus JSON escaping. A CSV `content` larger than 10 MB (UTF-8 bytes) is rejected by the server with `400 invalid_file` even if it fits the body limit.
+- Database file: `data/budget.db` (git-ignored; `BUDGET_DB` env overrides the path, tests use `:memory:`).
+
+### Errors
+
+Every non-2xx response has this body:
+
+```json
+{ "error": { "code": "validation", "message": "Enter a name." } }
+```
+
+`message` is short, human-readable and safe to show in the "Something went wrong — <reason>" toast. Codes:
+
+| HTTP | code | when |
+|---|---|---|
+| 400 | `validation` | bad/missing body field, bad query param, rule merchant < 3 chars, amount 0 on a recurring item, etc. |
+| 400 | `invalid_file` | CSV rejected (spec IM-2 / edge 14). `message` is the user-facing copy: "This doesn't look like a CSV export.", "This file is too large (max 10 MB).", "This file has no transactions in it." |
+| 400 | `nothing_to_import` | commit would insert 0 rows (all duplicates). Nothing is written. |
+| 403 | `forbidden` | `Origin` header present and not localhost/127.0.0.1/[::1] (CSRF guard); deleting/renaming/excluding a locked or system category |
+| 404 | `not_found` | unknown id, or unknown `/api/*` route |
+| 409 | `conflict` | duplicate name (account, category), duplicate rule merchant on PATCH |
+| 413 | `payload_too_large` | body > 15 MB |
+| 415 | `unsupported_media_type` | non-GET/HEAD request without `Content-Type: application/json` (send `{}` for body-less calls) |
+| 500 | `internal` | anything else; the DB is unchanged (all writes are single transactions) |
+
+### Shared shapes
+
+```ts
+type AccountType = "checking" | "credit_card" | "savings";
+type ColumnRole = "date" | "description" | "amount" | "debit" | "credit" | "ignore";
+type SignMode = "purchases_negative" | "purchases_positive" | "debit_credit";
+
+CsvFormat = {
+  header_signature: string;
+  column_roles: ColumnRole[];      // one per column
+  sign_mode: SignMode;
+  date_format: "MDY" | "YMD";
+  has_header: boolean;
+}
+
+Account = {
+  id: number; name: string; type: AccountType;
+  csv_format: CsvFormat | null;
+  last_import_date: string | null;  // YYYY-MM-DD
+  created_at: string;
+}
+
+Category = {
+  id: number; name: string; color: string;       // one of the 11 swatch oklch strings
+  excluded_from_totals: boolean;
+  system_key: "income" | "transfer" | "uncategorized" | null;
+  sort_order: number;
+}
+CategoryWithCounts = Category & {
+  transaction_count: number;       // all months
+  recurring_count: number;
+  rule_count: number;
+}
+
+Rule = { id: number; merchant: string; category_id: number; created_at: string }
+
+Transaction = {
+  id: number; account_id: number; date: string; description: string;
+  amount_cents: number; category_id: number; import_id: number; created_at: string;
+}
+
+ImportRecord = {
+  id: number; file_name: string; account_id: number; imported_at: string;
+  row_count: number; new_count: number; skipped_count: number; unreadable_count: number;
+  first_date: string | null; last_date: string | null;
+}
+
+RecurringItem = {
+  id: number; name: string; amount_cents: number;   // signed, never 0
+  category_id: number; account_id: number | null;
+  frequency: "monthly" | "biweekly" | "yearly";
+  anchor_date: string; match_text: string; active: boolean;
+}
+
+Occurrence = {                       // one expected/upcoming payment
+  recurring_id: number; name: string; amount_cents: number;
+  category_id: number; account_id: number | null;
+  date: string;                      // occurrence date
+}
+```
+
+---
+
+## Slice 1
+
+### Month range
+
+**GET `/api/months`**  -> 200
+```json
+{ "today": "2026-10-25", "current_month": "2026-10", "earliest_month": "2026-05",
+  "latest_month": "2026-11", "has_transactions": true }
+```
+`earliest_month` = earliest month with a transaction, else `current_month`. `latest_month` = `current_month` + 1. `has_transactions` drives the first-run states (DB-9, TX-10).
+
+### Accounts
+
+**GET `/api/accounts`** -> 200 `Account[]` (ordered by id).
+
+**PATCH `/api/accounts/:id`** — body (all optional, at least one): `{ "name"?: string, "type"?: AccountType, "csv_format"?: null }`. `csv_format` accepts only `null` (= "Forget format"). -> 200 `Account`. 409 `conflict` on duplicate name (case-insensitive); 400 on empty/>60 chars. Accounts are created only by import commit; there is no account delete.
+
+### Categories
+
+**GET `/api/categories`** -> 200 `CategoryWithCounts[]` ordered by `sort_order`.
+
+**POST `/api/categories`** — body `{ "name": string }` -> 201 `CategoryWithCounts`. Server trims, enforces 1–40 chars and case-insensitive uniqueness (409), picks the next swatch color in rotation, inserts before Income.
+
+**PATCH `/api/categories/:id`** — body (all optional): `{ "name"?: string, "color"?: string, "excluded_from_totals"?: boolean }` -> 200 `CategoryWithCounts`. 403 `forbidden` when renaming Income/Uncategorized, or setting `excluded_from_totals` on Income/Uncategorized. 409 on duplicate name. 400 if `color` isn't one of the 11 swatches.
+
+**DELETE `/api/categories/:id`** -> 204. Only `system_key = null`; otherwise 403. In one transaction: its transactions and recurring items move to Uncategorized, its rules and all its budget rows are deleted, then the category is deleted.
+
+### Rules
+
+**GET `/api/rules`** -> 200 `Rule[]` sorted by `merchant`.
+
+**GET `/api/rules/impact?merchant=KEY`** -> 200 `{ "uncategorized_count": number }` — Uncategorized transactions, all months, whose `UPPER(description)` contains `KEY`. Backs the prompt line "Also fixes N other uncategorized transactions" (TX-7). Call it after the row's PATCH, so the edited row is already excluded.
+
+**POST `/api/rules`** — "create rule (and apply)". Body `{ "merchant": string, "category_id": number }` -> 201 `{ "rule": Rule, "applied_count": number }`. `merchant` is uppercased/trimmed server-side, ≥ 3 chars. If a rule with that merchant exists its category is replaced (still 201, same `id`). Always sweeps: every *Uncategorized* transaction (all months) whose `UPPER(description)` contains the merchant is set to `category_id`; `applied_count` is how many changed.
+
+**PATCH `/api/rules/:id`** — body (optional) `{ "merchant"?: string, "category_id"?: number }` -> 200 `Rule`. 409 on duplicate merchant. Never touches existing transactions.
+
+**DELETE `/api/rules/:id`** -> 204. Never touches existing transactions.
+
+### Transactions
+
+**GET `/api/transactions?month=YYYY-MM[&q=text][&account=ID][&category=ID]`** -> 200
+```json
+{ "transactions": [Transaction], "income_cents": 240000, "spent_cents": 81234 }
+```
+Sorted `date` desc, `id` desc. `q` is a case-insensitive substring of `description`; filters AND together. `income_cents`/`spent_cents` use spec G6 over the **filtered** list (TX-1); count = `transactions.length`.
+
+**PATCH `/api/transactions/:id`** — body `{ "category_id": number }` -> 200 `Transaction`. No rule side effects (rules are created only through `POST /api/rules`).
+
+**GET `/api/transactions/uncategorized-count?month=YYYY-MM`** -> 200 `{ "count": number }` (nav badge, SH-2).
+
+### Import
+
+CSV transport: the client reads the file as UTF-8 text and sends it inside a JSON body as `content` (no multipart). `file_name` is the original name. Preview and commit use the **same** `{ file_name, content }` pair; commit re-parses the text server-side and ignores any client-computed rows.
+
+**GET `/api/imports/sample-csv`** -> 200 `{ "file_name": "chase-sample.csv", "content": "<csv text>" }` — generated, dated around today; feed it to preview like a real file (IM-3).
+
+**POST `/api/imports/preview`** — read-only, writes nothing.
+```json
+{
+  "file_name": "Chase_Activity.csv",
+  "content": "<csv text>",
+  "account_id": 1,          // optional; null/omitted = no account chosen or a new account
+  "format": { /* CsvFormat */ }  // optional; the user's current Step 2 choices
+}
+```
+-> 200
+```json
+{
+  "file_name": "Chase_Activity.csv",
+  "row_count": 59,
+  "columns": ["Details", "Posting Date", "Description", "Amount", "Type"],
+  "sample_rows": [["DEBIT", "10/11/2026", "TRADER JOE'S #552", "-42.10", "DEBIT"]],
+  "detected_format": { /* CsvFormat: header_signature, guessed column_roles, sign_mode, date_format, has_header */ },
+  "matched_accounts": [{ "id": 1, "name": "Chase Checking" }],
+  "suggested_account_id": 1,
+  "review": null
+}
+```
+- `columns`: header cells, or "Column 1…N" when `has_header` is false. `sample_rows`: first 5 data rows, raw cells.
+- `matched_accounts`: accounts whose saved `csv_format.header_signature` equals this file's signature. Exactly one -> "recognized" (IM-5, skip Step 2); more than one -> Step 2 pre-filled with the saved format, no account pre-selected; none -> Step 2 with `detected_format`.
+- `suggested_account_id`: account whose name's first word appears in `file_name` (IM-7), else null.
+- `review` is `null` unless the server can resolve a format: the request's `format`, else the saved format when `matched_accounts.length === 1`. When non-null:
+```json
+{
+  "account_id": 1,                 // account used for duplicate check (null = new account, no dupes)
+  "format": { /* CsvFormat actually used */ },
+  "new_rows": [PreviewRow],
+  "duplicate_rows": [PreviewRow],  // count-based, case-insensitive (spec 5.9)
+  "unreadable_rows": [{ "line": 12, "raw": "Total,,,,1234.56" }]
+}
+```
+`PreviewRow = { line: number, date: string, description: string, amount_cents: number, category_id: number, rule_merchant: string | null }` — `line` is the 1-based file line (the key for overrides at commit), `category_id` is the matching rule's category or Uncategorized, `rule_merchant` is that rule's merchant (drives the "rule" badge) else null. `description` is whitespace-normalized.
+- Errors: `400 invalid_file` (non-CSV content, NUL bytes, < 2 columns in every row, > 10 MB, no data rows). The `.csv` extension / size pre-checks are also done client-side.
+
+**POST `/api/imports`** — commit. Atomic: one SQLite transaction creates the account if new, saves the format if asked, inserts transactions, writes the `imports` row and `last_import_date`. Any failure writes nothing.
+```json
+{
+  "file_name": "Chase_Activity.csv",
+  "content": "<csv text>",
+  "account_id": 1,                       // existing account, or null when new_account is given
+  "new_account": null,                   // or { "name": "Chase Checking", "type": "checking" }
+  "format": { /* CsvFormat */ },
+  "save_format": true,                   // true = overwrite the account's csv_format; false = leave it unchanged
+  "category_overrides": [{ "line": 14, "category_id": 3 }]
+}
+```
+Exactly one of `account_id` / `new_account` is set (400 otherwise). Overrides only apply to lines that end up as new rows. Duplicates are recomputed at commit time. -> 201
+```json
+{
+  "import": ImportRecord,
+  "account": Account,
+  "uncategorized_count": 7,
+  "matched_recurring": [{ "recurring_id": 2, "name": "Paycheck", "date": "2026-10-24" }]
+}
+```
+`uncategorized_count` = how many of the newly inserted rows are Uncategorized (the "Categorize J remaining" button). `matched_recurring` = active recurring occurrences that are received now and were not received before this import (IM-20; slice 3 fills it, `[]` until then). `import.new_count` is `M`, `skipped_count` is `K`. 400 `nothing_to_import` when 0 new rows; no import row is written.
+
+**GET `/api/imports`** -> 200 `ImportListItem[]`, newest first:
+`ImportRecord & { "account_name": string, "transaction_count": number }` (`transaction_count` = transactions currently carrying that `import_id`, for the undo confirmation).
+
+**DELETE `/api/imports/:id`** — undo (IM-24). One transaction: delete all transactions with that `import_id` (recategorized included), delete the import row, recompute the account's `last_import_date`. -> 200 `{ "removed_count": number }`. Rules, accounts, formats, budgets, recurring untouched.
+
+### Data management
+
+**POST `/api/sample-data`** -> 204. Replaces all data with the seeded sample set (accounts, ~6 months of transactions grouped into `imports`, rules, recurring items with past anchors, budgets). The confirmation is client-side.
+
+**DELETE `/api/data`** -> 204. Erases every row in every table and re-seeds the default categories.
+
+---
+
+## Slice 2
+
+### Dashboard summary
+
+**GET `/api/summary?month=YYYY-MM`** -> 200
+```json
+{
+  "month": "2026-10",
+  "income_cents": 480000,
+  "spent_cents": 312450,
+  "net_cents": 167550,
+  "income_count": 2,
+  "spent_count": 41,
+  "uncategorized_count": 7,
+  "expected_income_cents": 0,
+  "expected_spent_cents": 14200,
+  "by_category": [{ "category_id": 4, "spent_cents": 120000 }],
+  "series": [{ "month": "2026-05", "income_cents": 480000, "spent_cents": 300000 }]
+}
+```
+All totals per spec G6. `income_count` = Income-category transactions in the month ("N deposits"); `spent_count` = counted non-Income transactions ("N transactions"); `uncategorized_count` = Uncategorized in the month (DB-4). `by_category`: counted non-Income categories (Uncategorized included) with spending > 0, largest first (DB-7). `series`: 6 entries ascending, ending at `month` (`spent_cents` may be negative; the chart clamps at 0). `expected_*_cents` are the §6.4 values (slice 3 fills them; `0` until then) and are never added to the totals. The dashboard's empty state uses `has_transactions` from `/api/months`.
+
+### Budgets
+
+`BudgetsResponse` (eligible categories only: not excluded, not Income/Uncategorized):
+```json
+{
+  "month": "2026-10",
+  "items": [{ "category_id": 4, "budget_cents": 45000, "spent_cents": 31240 }],
+  "total_budget_cents": 45000,
+  "spent_cents": 31240
+}
+```
+`budget_cents` is `null` when no budget is set. `items[].spent_cents` is clamped at ≥ 0. `total_budget_cents` = sum of the month's budgets over eligible categories; top-level `spent_cents` = spending across all eligible categories (BU-3). Items are in category `sort_order`. The Dashboard's budget progress uses the items with non-null `budget_cents`.
+
+**GET `/api/budgets?month=YYYY-MM`** -> 200 `BudgetsResponse`.
+
+**PUT `/api/budgets`** — body `{ "month": "2026-10", "category_id": 4, "amount_cents": 45000 }` -> 200 `BudgetsResponse`. `amount_cents` 0 deletes the row; negative -> 400.
+
+**POST `/api/budgets/copy`** — body `{ "month": "2026-10" }` (the target; source = previous month) -> 200 `{ "copied_count": number, "budgets": BudgetsResponse }`. `copied_count` 0 when the previous month has none (nothing changes). Same-category values are overwritten, others left.
+
+---
+
+## Slice 3
+
+### Recurring items
+
+`RecurringListItem = RecurringItem & { "next_date": string, "status": RecurringStatus }` where
+`RecurringStatus = { "kind": "paused" | "none" | "received" | "expected", "date": string | null }` (`date` set for `received`/`expected`; spec §6.3). `next_date` = first occurrence strictly after today (equals `anchor_date` while that is in the future).
+
+**GET `/api/recurring`** -> 200 `RecurringListItem[]` ordered by `id`.
+
+**POST `/api/recurring`** — body `{ name, amount_cents, category_id, account_id, frequency, anchor_date, match_text, active? }` (`RecurringItem` minus `id`; `active` defaults true) -> 201 `RecurringListItem`. Validation: name 1–60, `amount_cents` ≠ 0 (negative = expense), `match_text` uppercased/trimmed (empty falls back to `UPPER(name)`), valid `anchor_date`.
+
+**PATCH `/api/recurring/:id`** — any subset of the POST fields (Active toggle sends `{ "active": false }`) -> 200 `RecurringListItem`.
+
+**DELETE `/api/recurring/:id`** -> 204. Imported transactions are unaffected.
+
+**GET `/api/recurring/upcoming?month=YYYY-MM`** -> 200
+```json
+{ "expected": [Occurrence], "upcoming": [Occurrence] }
+```
+`expected`: active items' unreceived occurrences in `[month start, min(month end, today)]` (§6.4; empty for future months). `upcoming`: next 10 occurrences strictly after today across active items, by date then name (§6.5; independent of `month`).
+
+Recurring matches also surface in `POST /api/imports` (`matched_recurring`) and `GET /api/summary` (`expected_income_cents`, `expected_spent_cents`).
+
+---
+
+## Endpoint index
+
+| Slice | Method | Path |
+|---|---|---|
+| 1 | GET | `/api/months` |
+| 1 | GET, PATCH | `/api/accounts`, `/api/accounts/:id` |
+| 1 | GET, POST | `/api/categories` |
+| 1 | PATCH, DELETE | `/api/categories/:id` |
+| 1 | GET, POST | `/api/rules` |
+| 1 | GET | `/api/rules/impact` |
+| 1 | PATCH, DELETE | `/api/rules/:id` |
+| 1 | GET | `/api/transactions`, `/api/transactions/uncategorized-count` |
+| 1 | PATCH | `/api/transactions/:id` |
+| 1 | GET | `/api/imports`, `/api/imports/sample-csv` |
+| 1 | POST | `/api/imports/preview`, `/api/imports` |
+| 1 | DELETE | `/api/imports/:id` |
+| 1 | POST, DELETE | `/api/sample-data`, `/api/data` |
+| 2 | GET | `/api/summary` |
+| 2 | GET, PUT | `/api/budgets` |
+| 2 | POST | `/api/budgets/copy` |
+| 3 | GET, POST | `/api/recurring` |
+| 3 | PATCH, DELETE | `/api/recurring/:id` |
+| 3 | GET | `/api/recurring/upcoming` |
