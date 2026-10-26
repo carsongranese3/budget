@@ -103,6 +103,19 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
     })();
     res.status(201).json(withCounts(id));
   });
+  api.put("/categories/order", (req, res) => {
+    const ids = obj(req.body).ids;
+    if (!Array.isArray(ids) || !ids.every((i) => Number.isInteger(i))) throw bad("ids must be a list of category ids.");
+    db.transaction(() => {
+      const user = (db.prepare("SELECT id FROM categories WHERE system_key IS NULL").all() as { id: number }[]).map((r) => r.id);
+      if (ids.length !== user.length || new Set(ids).size !== ids.length || !ids.every((i) => user.includes(i)))
+        throw bad("List every custom category exactly once; built-in categories can't be reordered.");
+      const sys = (db.prepare("SELECT id FROM categories WHERE system_key IS NOT NULL ORDER BY sort_order, id").all() as { id: number }[]).map((r) => r.id);
+      const set = db.prepare("UPDATE categories SET sort_order = ? WHERE id = ?");
+      [...ids, ...sys].forEach((id, i) => set.run(i, id));
+    })();
+    res.json((db.prepare(`${CATEGORY_COUNTS_SQL} ORDER BY c.sort_order, c.id`).all() as any[]).map(toCategoryWithCounts));
+  });
   api.patch("/categories/:id", (req, res) => {
     const id = idParam(req);
     const cur = catById(id);

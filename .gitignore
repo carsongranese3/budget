@@ -13,3 +13,4 @@ data/*.db-*
 
 # Local screenshots
 Screenshot *.png
+session-report-*.html

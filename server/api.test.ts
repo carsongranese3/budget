@@ -333,3 +333,47 @@ describe("header detection with trailing commas", () => {
     expect(f.column_roles).toHaveLength(4);
   });
 });
+
+describe("categories: reorder", () => {
+  it("persists, pins built-ins last, drives budgets, validates, and create stays above built-ins", async () => {
+    app = await startApp();
+    const list = async () => (await app.call("GET", "/api/categories")).body as any[];
+    const all = await list();
+    const user = all.filter((c) => c.system_key === null).map((c) => c.id);
+    const sysIds = all.filter((c) => c.system_key !== null).map((c) => c.id);
+    const rev = [...user].reverse();
+    const r = await app.call("PUT", "/api/categories/order", { ids: rev });
+    expect(r.status).toBe(200);
+    const want = [...rev, ...sysIds];
+    expect(r.body.map((c: any) => c.id)).toEqual(want);
+    expect((await list()).map((c) => c.id)).toEqual(want);
+    expect((await list()).slice(-3).map((c) => c.system_key)).toEqual(["income", "transfer", "uncategorized"]);
+    const b = await app.call("GET", "/api/budgets?month=2026-10");
+    expect(b.body.items.map((i: any) => i.category_id)).toEqual(rev);
+    for (const ids of [user.slice(1), [...user, 99999], [...user.slice(1), user[1]], [...user.slice(1), sysIds[0]], [...user.slice(1), 1.5], "x"])
+      expect((await app.call("PUT", "/api/categories/order", { ids })).status).toBe(400);
+    expect((await app.call("PUT", "/api/categories/order", {})).status).toBe(400);
+    const c = await app.call("POST", "/api/categories", { name: "Pets" });
+    expect((await list()).map((x) => x.id)).toEqual([...rev, c.body.id, ...sysIds]);
+  });
+});
+
+describe("categories: reorder edge cases (QA)", () => {
+  it("rejected PUT leaves order unchanged; same order is a 200 no-op; 415 without JSON; [] ok with no custom categories", async () => {
+    app = await startApp();
+    const order = async () => ((await app.call("GET", "/api/categories")).body as any[]).map((c) => c.id);
+    const before = await order();
+    const user = ((await app.call("GET", "/api/categories")).body as any[]).filter((c) => c.system_key === null).map((c) => c.id);
+    expect((await app.call("PUT", "/api/categories/order", { ids: [user[1], user[0], ...user.slice(1)] })).status).toBe(400);
+    expect(await order()).toEqual(before);
+    expect((await app.call("PUT", "/api/categories/order", { ids: user })).status).toBe(200);
+    expect(await order()).toEqual(before);
+    const bad = await fetch(`${app.base}/api/categories/order`, { method: "PUT", headers: { "content-type": "text/plain" }, body: JSON.stringify({ ids: [...user].reverse() }) });
+    expect(bad.status).toBe(415);
+    expect(await order()).toEqual(before);
+    for (const id of user) await app.call("DELETE", `/api/categories/${id}`);
+    const r = await app.call("PUT", "/api/categories/order", { ids: [] });
+    expect(r.status).toBe(200);
+    expect(r.body.map((c: any) => c.system_key)).toEqual(["income", "transfer", "uncategorized"]);
+  });
+});

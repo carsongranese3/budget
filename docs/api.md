@@ -122,6 +122,8 @@ Occurrence = {                       // one expected/upcoming payment
 
 **PATCH `/api/categories/:id`** — body (all optional): `{ "name"?: string, "color"?: string, "excluded_from_totals"?: boolean }` -> 200 `CategoryWithCounts`. 403 `forbidden` when renaming Income/Uncategorized, or setting `excluded_from_totals` on Income/Uncategorized. 409 on duplicate name. 400 if `color` isn't one of the 11 swatches.
 
+**PUT `/api/categories/order`** — body `{ "ids": number[] }` (`ReorderCategoriesRequest`) = every non-system category id exactly once, in the new order -> 200 `CategoryWithCounts[]` (same as GET). One transaction: `sort_order` 0..n-1 for `ids`, then the built-ins (Income, Transfer, Uncategorized) after them in their existing relative order. 400 `validation` for non-array/non-integer ids, missing, extra, duplicate, unknown, or built-in ids. Create still inserts above the built-ins.
+
 **DELETE `/api/categories/:id`** -> 204. Only `system_key = null`; otherwise 403. In one transaction: its transactions and recurring items move to Uncategorized, its rules and all its budget rows are deleted, then the category is deleted.
 
 ### Rules
@@ -306,6 +308,7 @@ Recurring matches also surface in `POST /api/imports` (`matched_recurring`) and 
 | 1 | GET | `/api/months` |
 | 1 | GET, PATCH | `/api/accounts`, `/api/accounts/:id` |
 | 1 | GET, POST | `/api/categories` |
+| 1 | PUT | `/api/categories/order` |
 | 1 | PATCH, DELETE | `/api/categories/:id` |
 | 1 | GET, POST | `/api/rules` |
 | 1 | GET | `/api/rules/impact` |

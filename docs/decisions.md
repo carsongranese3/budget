@@ -92,3 +92,9 @@
 - Settings → Rules gets a "Reapply rules" button. It runs every rule over all **Uncategorized** transactions (all months) using the same precedence as import (longest merchant first, then newest); already-categorized transactions are never changed. No confirmation needed (only fills in Uncategorized).
 - Contract: `POST /api/rules/apply` (body `{}`) → 200 `{ "applied_count": number }`. Toast "Rules applied · N transactions categorized" (or "No uncategorized transactions matched a rule").
 - A rule whose category is Uncategorized never counts as applied (QA fix).
+
+## 2026-10-26 — Settings: rules grouped under categories; reorderable categories
+- The separate Rules section is removed. Each category row in Settings → Categories can be expanded (click the row's chevron / rule count) to show its rules in alphabetical order, with the existing inline edit/delete. Editing a rule's category moves it to that group. "Reapply rules" moves to the Categories section header.
+- User categories are reorderable by drag handle (native HTML drag-and-drop, no new dependency) and ↑/↓ buttons (keyboard/touch). The order is the existing `sort_order`, so it applies everywhere (Settings, Budgets rows, all category dropdowns, spending lists).
+- Built-ins (Income, Transfer, Uncategorized) are pinned at the bottom in their current relative order and can't be moved; new categories keep being inserted above them.
+- Contract: `PUT /api/categories/order` body `{ "ids": number[] }` = every non-system category id exactly once in the new order → 200 `CategoryWithCounts[]` (same as GET /api/categories). Any missing/extra/duplicate/system id → 400.

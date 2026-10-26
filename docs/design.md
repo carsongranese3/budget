@@ -18,13 +18,13 @@ Source: claude.ai/design project `c1a59d7f-63ba-4a12-a3f7-a867b982bc10` ("Budget
 | Import (Upload → Set up file → Review → Done) | `/import` | CSV preview/parse, account formats, commit import, import log |
 | Budgets (summary, editable per-category table, copy last month) | `/budgets` | budgets per month |
 | Recurring (table, status chips, add side panel) | `/recurring` | recurring items + matched status |
-| Settings (appearance, accounts, categories, rules, data) | `/settings` | accounts, categories, rules, sample data / erase |
+| Settings (appearance, accounts, categories with per-category rules, reorder) | `/settings` | accounts, categories (incl. order), rules |
 
 ## Where the build differs from the prototype
 
 - **Real data and dates.** The prototype fakes "today" (2026-10-25), limits the month range to 2026, and uses
   generated sample data plus a canned import. The app uses the real date, any month that has data, and real CSV
-  parsing. "Load sample data" in Settings stays as a demo/testing affordance.
+  parsing. Load sample data is API-only (no Settings UI).
 - **Persistence.** The prototype keeps state in memory. The app stores everything in the local SQLite file through the
   Express API. Theme preference stays client-side.
 - **Money.** The prototype uses float dollars and budget strings. The app stores integer cents everywhere.

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Account, AccountType, ApplyRulesResponse, CategoryWithCounts, Rule } from "../../../shared/types";
 import { api, ApiFail, useGet } from "../api";
 import { useApp } from "../app";
@@ -54,27 +54,79 @@ export default function Settings() {
         )}
       </Section>
 
-      <Section title="Categories">
-        <ul className="m-0 list-none p-0">
-          {categories.map((c) => <CategoryRow key={c.id} c={c} onDeleted={rules.reload} />)}
-        </ul>
+      <Section title="Categories" action={<ReapplyRules disabled={!rules.data?.length} />} sub="Open a category to see its rules. Rules assign a category to imported transactions whose description contains the text.">
+        {rules.error && !rules.data && <div className="p-4"><LoadErr msg={rules.error} retry={rules.reload} /></div>}
+        <CategoryList rules={rules.data ?? []} loading={!rules.data && !rules.error} reloadRules={rules.reload} />
         <AddCategory />
       </Section>
-
-      <Section title="Rules" action={<ReapplyRules disabled={!rules.data?.length} />} sub="Rules assign a category to imported transactions whose description contains the text.">
-        {rules.error && !rules.data ? (
-          <div className="p-4"><LoadErr msg={rules.error} retry={rules.reload} /></div>
-        ) : !rules.data ? (
-          <Loading />
-        ) : rules.data.length === 0 ? (
-          <p className="m-0 px-[18px] py-6 text-ink-3">No rules yet. Recategorize a transaction and choose “Create rule”.</p>
-        ) : (
-          <ul className="m-0 list-none p-0">
-            {rules.data.map((r) => <RuleRow key={r.id} r={r} done={rules.reload} />)}
-          </ul>
-        )}
-      </Section>
     </>
+  );
+}
+
+function CategoryList({ rules, loading, reloadRules }: { rules: Rule[]; loading: boolean; reloadRules: () => void }) {
+  const { categories, reload, fail } = useApp();
+  const [pending, setPending] = useState<number[] | null>(null); // optimistic order while the PUT is in flight
+  const [drag, setDrag] = useState<{ id: number; over: number; after: boolean } | null>(null);
+  const built = categories.filter((c) => c.system_key !== null);
+  const users = categories.filter((c) => c.system_key === null);
+  const serverIds = users.map((c) => c.id);
+  // Drop the optimistic order once the server list matches it, or holds a different set of ids (category added/removed elsewhere); a stale same-set refresh must not undo a later move.
+  useEffect(() => setPending((p) => (p && (p.join() === serverIds.join() || [...p].sort().join() !== [...serverIds].sort().join()) ? null : p)), [categories]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ids = pending ?? serverIds;
+  const ordered = ids.map((id) => users.find((c) => c.id === id)).filter((c): c is CategoryWithCounts => !!c);
+
+  async function commit(next: number[]) {
+    if (next.join() === ids.join()) return;
+    setPending(next);
+    try {
+      await api("/categories/order", "PUT", { ids: next });
+      reload();
+    } catch (e) {
+      setPending(null);
+      reload(); // self-heal a stale list (e.g. a category added elsewhere)
+      fail(e);
+    }
+  }
+  const move = (id: number, d: -1 | 1) => {
+    const i = ids.indexOf(id), next = [...ids];
+    next.splice(i, 1);
+    next.splice(i + d, 0, id);
+    commit(next);
+  };
+  function drop() {
+    if (!drag) return;
+    const next = ids.filter((x) => x !== drag.id);
+    next.splice(next.indexOf(drag.over) + (drag.after ? 1 : 0), 0, drag.id);
+    setDrag(null);
+    commit(next);
+  }
+  const rulesOf = (id: number) => rules.filter((r) => r.category_id === id).sort((a, b) => a.merchant.localeCompare(b.merchant));
+
+  return (
+    <ul className="m-0 list-none p-0">
+      {ordered.map((c, i) => (
+        <CategoryRow
+          key={c.id}
+          c={c}
+          rules={rulesOf(c.id)}
+          loading={loading}
+          reloadRules={reloadRules}
+          order={{
+            idx: i,
+            count: ordered.length,
+            canUp: i > 0,
+            canDown: i < ordered.length - 1,
+            move: (d) => move(c.id, d),
+            drag,
+            start: () => setDrag({ id: c.id, over: c.id, after: false }),
+            over: (after) => drag && (drag.over !== c.id || drag.after !== after) && setDrag({ ...drag, over: c.id, after }),
+            end: () => setDrag(null),
+            drop,
+          }}
+        />
+      ))}
+      {built.map((c) => <CategoryRow key={c.id} c={c} rules={rulesOf(c.id)} loading={loading} reloadRules={reloadRules} />)}
+    </ul>
   );
 }
 
@@ -163,9 +215,21 @@ function AccountRow({ a }: { a: Account }) {
   );
 }
 
-function CategoryRow({ c, onDeleted }: { c: CategoryWithCounts; onDeleted: () => void }) {
+// The target arrow may still be disabled until the re-render lands, so focus next frame.
+const focusLater = (el: Element | null) => requestAnimationFrame(() => (el as HTMLElement | null)?.focus());
+
+interface Order {
+  idx: number; count: number;
+  canUp: boolean; canDown: boolean; move: (d: -1 | 1) => void;
+  drag: { id: number; over: number; after: boolean } | null;
+  start: () => void; over: (after: boolean) => void; end: () => void; drop: () => void;
+}
+
+function CategoryRow({ c, rules, loading, reloadRules, order }: { c: CategoryWithCounts; rules: Rule[]; loading: boolean; reloadRules: () => void; order?: Order }) {
   const { reload, toast, fail, confirm } = useApp();
   const [name, setName] = useState(c.name);
+  const [open, setOpen] = useState(false);
+  const panelId = `rules-${c.id}`;
   const locked = c.system_key === "income" || c.system_key === "uncategorized";
   const patch = async (body: object) => {
     try {
@@ -193,14 +257,43 @@ function CategoryRow({ c, onDeleted }: { c: CategoryWithCounts; onDeleted: () =>
     try {
       await api(`/categories/${c.id}`, "DELETE");
       reload();
-      onDeleted();
+      reloadRules();
       toast(`Deleted ${c.name}`);
     } catch (e) {
       fail(e);
     }
   }
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line px-[18px] py-2 first:border-t-0">
+    <li
+      className={`relative border-t border-line first:border-t-0 ${order?.drag?.id === c.id ? "opacity-40" : ""}`}
+      onDragOver={order && ((e) => {
+        if (!order.drag) return;
+        e.preventDefault();
+        const r = e.currentTarget.firstElementChild!.getBoundingClientRect(); // header only, not the rules panel
+        order.over(e.clientY > r.top + r.height / 2);
+      })}
+      onDrop={order && ((e) => { e.preventDefault(); order.drop(); })}
+    >
+    {order?.drag && order.drag.id !== c.id && order.drag.over === c.id && (
+      <span aria-hidden className={`pointer-events-none absolute inset-x-0 z-10 h-[3px] bg-accent ${order.drag.after ? "bottom-0" : "top-0"}`} />
+    )}
+    <div
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 px-[18px] py-2"
+    >
+      {order ? (
+        <span
+          draggable
+          aria-hidden
+          title="Drag to reorder"
+          className="cursor-grab select-none text-ink-3 active:cursor-grabbing"
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setDragImage(e.currentTarget.closest("li")!, 0, 0);
+            order.start();
+          }}
+          onDragEnd={order.end}
+        >⋮⋮</span>
+      ) : <span aria-hidden className="w-[14px]" />}
       <Select
         label={`Color of ${c.name}`}
         value={c.color}
@@ -219,9 +312,24 @@ function CategoryRow({ c, onDeleted }: { c: CategoryWithCounts; onDeleted: () =>
         onBlur={saveName}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
       />
-      <span className="min-w-[140px] flex-1 text-[12.5px] text-ink-3">
+      <span className="min-w-[140px] flex-1 text-[12.5px] text-ink-3 sm:w-[200px] sm:flex-none">
         {c.system_key ? "Built-in · " : ""}{plural(c.transaction_count, "transaction")}
       </span>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        className={`${btnLink} flex items-center gap-1 sm:min-w-[110px] ${rules.length ? "" : "!text-ink-3"}`}
+        onClick={() => setOpen(!open)}
+      >
+        {loading ? "Loading rules…" : rules.length ? plural(rules.length, "rule") : "No rules"}<Chevron up={open} />
+      </button>
+      {order ? (
+        <span className="flex gap-1">
+          <button type="button" aria-label={`Move ${c.name} up`} disabled={!order.canUp} className={`${btnSecondary} !px-2 !py-[3px]`} onClick={(e) => { order.move(-1); if (order.idx === 1) focusLater(e.currentTarget.nextElementSibling); }}>↑</button>
+          <button type="button" aria-label={`Move ${c.name} down`} disabled={!order.canDown} className={`${btnSecondary} !px-2 !py-[3px]`} onClick={(e) => { order.move(1); if (order.idx === order.count - 2) focusLater(e.currentTarget.previousElementSibling); }}>↓</button>
+        </span>
+      ) : <span aria-hidden className="w-[62px]" />}
       {!locked && (
         <label className="flex items-center gap-2 text-[13.5px] text-ink-2">
           Exclude from totals
@@ -231,6 +339,12 @@ function CategoryRow({ c, onDeleted }: { c: CategoryWithCounts; onDeleted: () =>
       {c.system_key === null && (
         <button type="button" className={`${btnLink} !text-neg`} onClick={del}>Delete</button>
       )}
+    </div>
+    {open && (
+      <ul id={panelId} className="m-0 list-none bg-surface-2 p-0 pl-6">
+        {rules.length === 0 ? <li className="px-[18px] py-3 text-[13px] text-ink-3">No rules. Recategorize a transaction and choose “Create rule”.</li> : rules.map((r) => <RuleRow key={r.id} r={r} done={() => { reloadRules(); reload(); }} />)}
+      </ul>
+    )}
     </li>
   );
 }
@@ -306,8 +420,10 @@ function RuleRow({ r, done }: { r: Rule; done: () => void }) {
           <span aria-hidden className="text-ink-3">→</span>
           <span className="flex items-center gap-2">{c && <Dot color={c.color} />}{c?.name ?? "—"}</span>
           <span className="flex-1" />
-          <button type="button" className={btnLink} onClick={() => setEdit(true)}>Edit</button>
-          <button type="button" className={`${btnLink} !text-neg`} onClick={del}>Delete</button>
+          <span className="flex gap-3 whitespace-nowrap">
+            <button type="button" className={btnLink} onClick={() => setEdit(true)}>Edit</button>
+            <button type="button" className={`${btnLink} !text-neg`} onClick={del}>Delete</button>
+          </span>
         </>
       )}
     </li>

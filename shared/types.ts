@@ -66,6 +66,7 @@ export interface UpdateAccountRequest { name?: string; type?: AccountType; csv_f
 
 // Categories
 export interface CreateCategoryRequest { name: string }
+export interface ReorderCategoriesRequest { ids: number[] }
 export interface UpdateCategoryRequest { name?: string; color?: string; excluded_from_totals?: boolean }
 
 // Rules
