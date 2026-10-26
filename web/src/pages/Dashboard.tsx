@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { BudgetsResponse, Occurrence, RecurringListItem, SummaryResponse, UpcomingResponse } from "../../../shared/types";
 import { useGet } from "../api";
 import { useApp } from "../app";
-import { axisLabel, axisStep, fmtDate, fmtDateY, money, monthLabel, monthName, plural } from "../lib";
+import { axisLabel, axisStep, seriesEnd, fmtDate, fmtDateY, money, monthLabel, monthName, plural } from "../lib";
 import { btnLink, btnPrimary, btnSecondary, Card, Dot, LoadErr, Loading, PageHead } from "../ui";
 
 const cardTitle = "text-[14.5px] font-semibold";
@@ -44,8 +44,8 @@ function FirstRun() {
 }
 
 /** Paired bars as plain HTML buttons (matches the design markup; native keyboard + focus). */
-function SeriesChart({ series, selected, onSelect, canSelect }: {
-  series: SummaryResponse["series"]; selected: string; onSelect: (m: string) => void; canSelect: (m: string) => boolean;
+function SeriesChart({ series, selected, onOpen, canSelect }: {
+  series: SummaryResponse["series"]; selected: string; onOpen: (m: string) => void; canSelect: (m: string) => boolean;
 }) {
   const [hover, setHover] = useState<string | null>(null);
   const clamp = (n: number) => Math.max(0, n);
@@ -65,7 +65,7 @@ function SeriesChart({ series, selected, onSelect, canSelect }: {
             </div>
           ))}
         </div>
-        <div role="group" aria-label="Income and spending, last 6 months" className="relative flex min-h-0 flex-1 gap-[6px]" onMouseLeave={() => setHover(null)}>
+        <div role="group" aria-label={`Income and spending, 7 months around ${monthLabel(selected)}`} className="relative flex min-h-0 flex-1 gap-[6px]" onMouseLeave={() => setHover(null)}>
           {series.map((s) => {
             const on = s.month === selected;
             const ok = canSelect(s.month);
@@ -73,13 +73,13 @@ function SeriesChart({ series, selected, onSelect, canSelect }: {
               <button
                 key={s.month}
                 type="button"
-                aria-pressed={on}
+                aria-current={on ? "date" : undefined}
                 aria-disabled={!ok || undefined}
-                aria-label={`${monthLabel(s.month)}: income ${money(s.income_cents)}, spending ${money(clamp(s.spent_cents))}`}
+                aria-label={`${monthLabel(s.month)}: income ${money(s.income_cents)}, spending ${money(clamp(s.spent_cents))} — view transactions`}
                 onMouseEnter={() => setHover(s.month)}
                 onFocus={() => setHover(s.month)}
                 onBlur={() => setHover(null)}
-                onClick={() => ok && onSelect(s.month)}
+                onClick={() => ok && onOpen(s.month)}
                 className={`flex h-full min-w-0 flex-1 flex-col items-center gap-2 rounded border-0 bg-transparent p-0 ${ok ? "" : "!cursor-default"}`}
               >
                 <div className={`flex min-h-0 w-full flex-1 items-end justify-center gap-1 ${on || hover === s.month ? "opacity-100" : "opacity-45"}`}>
@@ -205,17 +205,11 @@ export function Dashboard() {
 
 function Loaded({ month, months, categories, to }: Pick<ReturnType<typeof useApp>, "month" | "months" | "categories" | "to">) {
   const nav = useNavigate();
-  const [params, setParams] = useSearchParams();
-  const sum = useGet<SummaryResponse>(`/summary?month=${month}`);
+  const sum = useGet<SummaryResponse>(`/summary?month=${month}&series_end=${seriesEnd(month, months.earliest_month, months.current_month)}`);
   const bud = useGet<BudgetsResponse>(`/budgets?month=${month}`);
   const uncat = categories.find((c) => c.system_key === "uncategorized");
 
-  const selectMonth = (m: string) => {
-    const n = new URLSearchParams(params);
-    if (m === months.current_month) n.delete("month");
-    else n.set("month", m);
-    setParams(n);
-  };
+  const openMonth = (m: string) => nav(m === months.current_month ? "/transactions" : `/transactions?month=${m}`);
   const canSelect = (m: string) => m >= months.earliest_month && m <= months.latest_month;
 
   const head = (
@@ -267,7 +261,7 @@ function Loaded({ month, months, categories, to }: Pick<ReturnType<typeof useApp
               <span className="flex items-center gap-[6px]"><span aria-hidden className="size-[9px] rounded-[2px] bg-spend" />Spending</span>
             </div>
           </div>
-          <SeriesChart series={s.series} selected={month} onSelect={selectMonth} canSelect={canSelect} />
+          <SeriesChart series={s.series} selected={month} onOpen={openMonth} canSelect={canSelect} />
         </Card>
         <Card className="flex min-h-0 min-w-0 flex-[1_1_300px] flex-col gap-3 overflow-hidden px-5 py-[18px]">
           <UpcomingCard month={month} />

@@ -15,6 +15,12 @@ export function addMonth(m: string, d: number): string {
   const t = Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7)) - 1 + d;
   return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
 }
+/** Last month of the 7-month dashboard chart window (see docs/decisions.md). */
+export const seriesEnd = (selected: string, earliest: string, current: string) => {
+  const a = addMonth(selected, 3) > addMonth(earliest, 6) ? addMonth(selected, 3) : addMonth(earliest, 6);
+  const b = current > selected ? current : selected;
+  return a < b ? a : b;
+};
 /** "2026-10-11" -> "Oct 11" (or "Oct 11, 2026" with year) */
 export function fmtDate(d: string | null | undefined, year = false): string {
   if (!d || !/^\d{4}-\d{2}-\d{2}/.test(d)) return "—";

@@ -145,13 +145,13 @@ Routes: `/`, `/transactions`, `/import`, `/budgets`, `/recurring`, `/settings` (
 - SH-8 Any API failure shows a toast "Something went wrong — <short reason>" and leaves on-screen data unchanged (no partial optimistic state left behind).
 
 ### 4.1 Dashboard (`/`) — README §1
-Data: totals for the selected month, 6-month income/spend series, spending by category, budget progress, expected + upcoming recurring.
+Data: totals for the selected month, 7-month income/spend series, spending by category, budget progress, expected + upcoming recurring.
 
 - DB-1 Income tile = `income_cents` (green). Sub-line: "+$X expected, not imported yet" when expected income (§6.4) > 0, else "N deposits" (count of Income-category transactions).
 - DB-2 Spent tile = `spent_cents`. Sub-line: "+$X expected, not imported yet" when expected spending > 0, else "N transactions" (count of counted, non-Income transactions).
 - DB-3 Net tile shows "+$X" / "−$X". Sub-line "N% of income kept" = round(net / income × 100); when income is 0 the sub-line is "—".
 - DB-4 Uncategorized tile shows the month's Uncategorized count; when > 0 it has the amber treatment. Clicking it opens `/transactions?month=…&category=<uncategorized id>`.
-- DB-5 Income vs spending chart (hand-rolled HTML/CSS bars) shows 6 months ending at the selected month, paired bars, y-axis gridlines at quarters with step = max($500, ceil(max/4/$500)×$500) labelled "$0, $1.5k…". Selected month at full opacity, others 0.45. Hover updates the caption "<Month> — income $… · spending $…"; click selects that month (if within G5 range).
+- DB-5 Income vs spending chart (hand-rolled HTML/CSS bars) shows 7 months centered on the selected month (window end = min(max(selected+3, earliest+6), max(current, selected)); see docs/decisions.md), paired bars, y-axis gridlines at quarters with step = max($500, ceil(max/4/$500)×$500) labelled "$0, $1.5k…". Selected month at full opacity, others 0.45. Hover updates the caption "<Month> — income $… · spending $…"; click opens Transactions for that month (if within G5 range); the top-bar arrows change the selected month.
 - DB-6 Upcoming recurring card: first the "Expected this month, not imported yet" rows (dashed border, dimmed amount, "Expected Oct 22 · <account>"), then the next 10 occurrences strictly after today across all active items, sorted by date then name, each "Due Nov 1 · <account>". The list scrolls inside the card. "Manage" goes to Recurring. No active items → "No recurring items yet" with "Manage" link.
 - DB-7 Spending by category: one bar per counted, non-Income category with spending > 0 in the month, largest first, bar width relative to the largest.
 - DB-8 Budget progress: one row per category with a budget this month (eligible per §4.4), "$spent / $budget", bar accent / amber at ≥ 85% / red when spent > budget; notes "$X left" (amber, near) or "Over by $X" (red). "Edit budgets" link to Budgets. No budgets → "No budgets for <Month>" + "Set budgets" link.

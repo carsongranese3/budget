@@ -45,8 +45,29 @@ describe("GET /api/summary", () => {
     add("2026-01-01", -200, key("uncategorized"));
     add("2026-03-01", -999, key("uncategorized")); // outside window
     const r = (await app.call("GET", "/api/summary?month=2026-02")).body;
-    expect(r.series.map((s: any) => s.month)).toEqual(["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"]);
-    expect(r.series.map((s: any) => [s.income_cents, s.spent_cents])).toEqual([[0, 100], [0, 0], [0, 0], [1000, 0], [0, 200], [0, 0]]);
+    expect(r.series.map((s: any) => s.month)).toEqual(["2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"]);
+    expect(r.series.map((s: any) => [s.income_cents, s.spent_cents])).toEqual([[0, 0], [0, 100], [0, 0], [0, 0], [1000, 0], [0, 200], [0, 0]]);
+  });
+  it("series_end shifts the 7-month window; month totals stay put", async () => {
+    const { key, add } = await setup();
+    add("2026-11-10", -300, key("uncategorized"));
+    add("2027-01-05", -400, key("uncategorized"));
+    const r = (await app.call("GET", "/api/summary?month=2026-11&series_end=2027-01")).body;
+    expect(r.series.map((s: any) => s.month)).toEqual(["2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12", "2027-01"]);
+    expect(r.series[4]).toEqual({ month: "2026-11", income_cents: 0, spent_cents: 300 });
+    expect(r.series[6].spent_cents).toBe(400);
+    expect(r).toMatchObject({ month: "2026-11", spent_cents: 300, spent_count: 1 });
+    const d = (await app.call("GET", "/api/summary?month=2026-11")).body;
+    expect(d.series).toHaveLength(7);
+    expect(d.series.at(-1).month).toBe("2026-11");
+    const max = (await app.call("GET", "/api/summary?month=2026-11&series_end=2027-05")).body;
+    expect(max.series.at(-1).month).toBe("2027-05");
+    expect(max.series[0].month).toBe("2026-11");
+  });
+  it("rejects bad series_end", async () => {
+    await setup();
+    for (const q of ["series_end=2026-10", "series_end=2027-06", "series_end=nope"])
+      expect((await app.call("GET", `/api/summary?month=2026-11&${q}`)).status).toBe(400);
   });
   it("validates month", async () => {
     await setup();

@@ -241,12 +241,14 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
   };
   api.get("/summary", (req, res) => {
     const m = month(req.query.month);
+    const end = req.query.series_end === undefined ? m : month(req.query.series_end, "series_end");
+    if (end < m || end > addMonths(m, 6)) throw bad("Chart range must include the selected month.");
     const cats = allCats();
-    // One query for the 6-month window; bucket by month in JS and run the shared G6 function per bucket.
-    const first = addMonths(m, -5);
+    // One query for the 7-month window ending at series_end; bucket by month in JS and run the shared G6 function per bucket.
+    const first = addMonths(end, -6);
     const rows = db.prepare("SELECT substr(date,1,7) m, amount_cents, category_id FROM transactions WHERE date BETWEEN ? AND ?")
-      .all(`${first}-01`, `${m}-31`) as { m: string; amount_cents: number; category_id: number }[];
-    const series = Array.from({ length: 6 }, (_, i) => {
+      .all(`${first}-01`, `${end}-31`) as { m: string; amount_cents: number; category_id: number }[];
+    const series = Array.from({ length: 7 }, (_, i) => {
       const mm = addMonths(first, i);
       const t = computeTotals(rows.filter((r) => r.m === mm), cats);
       return { month: mm, income_cents: t.income_cents, spent_cents: t.spent_cents };

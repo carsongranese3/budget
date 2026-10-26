@@ -67,3 +67,8 @@
 - Summary/budgets aggregate the window's rows in JS (reuses the shared G6 function) rather than in SQL. Upgrade: same trigger.
 - Origin allowlist accepts any loopback port; other local processes can call the API (they could already read the DB file). Upgrade: pin to 5173/5174 if the app ever runs alongside untrusted local web apps.
 - Recurring table scrolls horizontally below ~960px (per design: tables scroll inside cards).
+
+## 2026-10-25 — Dashboard chart: click opens Transactions, centered 7-month window
+- Clicking a month's bars opens `/transactions` for that month (`?month=` omitted when it's the current month); it no longer selects the month. The top-bar ‹ › arrows are the way to change the selected month.
+- The chart shows **7 months** (was 6) with the selected month centered: ideal window = selected −3 … +3. Window end = min(max(selected+3, earliest_month+6), max(current_month, selected)); start = end − 6. So it never runs past the current month unless next month is selected, slides right near the first data month, and with < 7 months of data it ends at the current month and earlier months stay inert.
+- Contract: `/api/summary` takes optional `series_end` (default `month`); `series` is 7 entries ending at it. Supersedes spec DB-5's "6 months ending at the selected month … click selects".

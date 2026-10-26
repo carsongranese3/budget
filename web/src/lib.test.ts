@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { axisLabel, axisStep, centsToInput, cleanDollars, dollarsToCents, txQuery } from "./lib";
+import { addMonth, axisLabel, axisStep, centsToInput, cleanDollars, dollarsToCents, seriesEnd, txQuery } from "./lib";
 
 describe("txQuery", () => {
   it("sends only month with no filters", () => expect(txQuery("2026-10", "", "", "", [1, 2])).toBe("/transactions?month=2026-10"));
@@ -30,5 +30,32 @@ describe("budget money", () => {
     expect(axisLabel(50000)).toBe("$500");
     expect(axisStep(0)).toBe(50000);
     expect(axisStep(600000)).toBe(150000);
+  });
+});
+
+describe("seriesEnd", () => {
+  it("centers in the middle of the data", () => expect(seriesEnd("2026-07", "2026-01", "2026-10")).toBe("2026-10"));
+  it("stops at the current month near the right edge", () => expect(seriesEnd("2026-09", "2026-01", "2026-10")).toBe("2026-10"));
+  it("follows next month when selected", () => expect(seriesEnd("2026-11", "2026-01", "2026-10")).toBe("2026-11"));
+  it("slides right near the first month", () => expect(seriesEnd("2026-02", "2026-01", "2026-10")).toBe("2026-07"));
+  it("caps at current when data spans < 7 months", () => expect(seriesEnd("2026-06", "2026-05", "2026-10")).toBe("2026-10"));
+  it("crosses a year boundary", () => expect(seriesEnd("2026-11", "2025-01", "2027-03")).toBe("2027-02"));
+});
+
+describe("seriesEnd invariants (every selectable month)", () => {
+  it("always yields a window the API accepts, never past max(current, selected), matching the decisions-log formula", () => {
+    const idx = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7)) - 1;
+    for (const current of ["2026-10", "2027-01", "2026-12"])
+      for (let back = 0; back <= 30; back++) {
+        const earliest = addMonth(current, -back);
+        for (let sel = earliest; sel <= addMonth(current, 1); sel = addMonth(sel, 1)) {
+          const e = idx(seriesEnd(sel, earliest, current));
+          const s = idx(sel), c = idx(current), first = idx(earliest);
+          expect(e).toBe(Math.min(Math.max(s + 3, first + 6), Math.max(c, s)));
+          expect(e >= s && e <= s + 6).toBe(true); // server: month <= series_end <= month+6
+          expect(e).toBeLessThanOrEqual(Math.max(c, s));
+          if (back >= 6 && sel <= current) expect(e - 6).toBeGreaterThanOrEqual(first); // >= 7 months of range: no inert leading bars
+        }
+      }
   });
 });

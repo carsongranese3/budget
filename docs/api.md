@@ -232,7 +232,7 @@ Exactly one of `account_id` / `new_account` is set (400 otherwise). Overrides on
 
 ### Dashboard summary
 
-**GET `/api/summary?month=YYYY-MM`** -> 200
+**GET `/api/summary?month=YYYY-MM[&series_end=YYYY-MM]`** -> 200
 ```json
 {
   "month": "2026-10",
@@ -248,7 +248,7 @@ Exactly one of `account_id` / `new_account` is set (400 otherwise). Overrides on
   "series": [{ "month": "2026-05", "income_cents": 480000, "spent_cents": 300000 }]
 }
 ```
-All totals per spec G6. `income_count` = Income-category transactions in the month ("N deposits"); `spent_count` = counted non-Income transactions ("N transactions"); `uncategorized_count` = Uncategorized in the month (DB-4). `by_category`: counted non-Income categories (Uncategorized included) with spending > 0, largest first (DB-7). `series`: 6 entries ascending, ending at `month` (`spent_cents` may be negative; the chart clamps at 0). `expected_*_cents` are the §6.4 values and are never added to the totals. The dashboard's empty state uses `has_transactions` from `/api/months`.
+All totals per spec G6. `income_count` = Income-category transactions in the month ("N deposits"); `spent_count` = counted non-Income transactions ("N transactions"); `uncategorized_count` = Uncategorized in the month (DB-4). `by_category`: counted non-Income categories (Uncategorized included) with spending > 0, largest first (DB-7). `series`: 7 entries ascending, ending at `series_end` (default `month`). `series_end` must be a valid month with `month` inside the window (`month` ≤ `series_end` ≤ `month`+6), else 400 `validation` (`spent_cents` may be negative; the chart clamps at 0). `expected_*_cents` are the §6.4 values and are never added to the totals. The dashboard's empty state uses `has_transactions` from `/api/months`.
 
 ### Budgets
 
