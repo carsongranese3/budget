@@ -1,7 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from "express";
-import { computeTotals } from "../shared/totals.js";
+import { computeTotals, spendByCategory } from "../shared/totals.js";
 import type {
-  ApiError, Category, CategoryWithCounts, MonthsResponse, Rule, Transaction, TransactionsResponse,
+  ApiError, BudgetsResponse, Category, SummaryResponse, CategoryWithCounts, MonthsResponse, Rule, Transaction, TransactionsResponse,
 } from "../shared/types.js";
 import {
   CATEGORY_COUNTS_SQL, SWATCHES, type DB, eraseAll, localDate, toAccount, toCategory,
@@ -9,6 +9,7 @@ import {
 } from "./db.js";
 import { HttpError, bad, int, month, notFound, obj, oneOf, str } from "./http.js";
 import { commit, listImports, preview, undoImport } from "./imports.js";
+import { createRecurring, expectedTotals, listRecurring, updateRecurring, upcomingFor } from "./recurring.js";
 import { loadSampleData, sampleCsv } from "./sample.js";
 
 const isConstraint = (e: any) => typeof e?.code === "string" && e.code.startsWith("SQLITE_CONSTRAINT");
@@ -112,7 +113,7 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
     if (name !== undefined && name !== cur.name && locked) throw new HttpError(403, "forbidden", `${cur.name} can't be renamed.`);
     if (b.color !== undefined) oneOf(b.color, "color", SWATCHES);
     if (b.excluded_from_totals !== undefined) {
-      if (typeof b.excluded_from_totals !== "boolean") throw bad("excluded_from_totals must be a boolean.");
+      if (typeof b.excluded_from_totals !== "boolean") throw bad("Excluded from totals must be true or false.");
       if (locked && b.excluded_from_totals !== !!cur.excluded_from_totals)
         throw new HttpError(403, "forbidden", `${cur.name} can't be excluded from totals.`);
     }
@@ -213,7 +214,7 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
     const where = ["date BETWEEN ? AND ?"];
     const args: (string | number)[] = [lo, hi];
     if (req.query.q !== undefined) {
-      if (typeof req.query.q !== "string" || req.query.q.length > 200) throw bad("q must be text.");
+      if (typeof req.query.q !== "string" || req.query.q.length > 200) throw bad("Search must be text.");
       if (req.query.q !== "") { where.push("instr(ujs(description), ?) > 0"); args.push(req.query.q.toUpperCase()); }
     }
     if (req.query.account !== undefined) { where.push("account_id = ?"); args.push(int(req.query.account, "account")); }
@@ -230,6 +231,95 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
     const r = db.prepare("UPDATE transactions SET category_id = ? WHERE id = ?").run(category_id, id);
     if (!r.changes) throw notFound("Transaction not found.");
     res.json(db.prepare("SELECT * FROM transactions WHERE id = ?").get(id));
+  });
+
+  // ---- summary (slice 2) ----
+  const allCats = () => (db.prepare("SELECT * FROM categories").all() as any[]).map(toCategory);
+  const addMonths = (m: string, n: number) => {
+    const i = Number(m.slice(0, 4)) * 12 + Number(m.slice(5)) - 1 + n;
+    return `${Math.floor(i / 12)}-${String((((i % 12) + 12) % 12) + 1).padStart(2, "0")}`;
+  };
+  api.get("/summary", (req, res) => {
+    const m = month(req.query.month);
+    const cats = allCats();
+    // One query for the 6-month window; bucket by month in JS and run the shared G6 function per bucket.
+    const first = addMonths(m, -5);
+    const rows = db.prepare("SELECT substr(date,1,7) m, amount_cents, category_id FROM transactions WHERE date BETWEEN ? AND ?")
+      .all(`${first}-01`, `${m}-31`) as { m: string; amount_cents: number; category_id: number }[];
+    const series = Array.from({ length: 6 }, (_, i) => {
+      const mm = addMonths(first, i);
+      const t = computeTotals(rows.filter((r) => r.m === mm), cats);
+      return { month: mm, income_cents: t.income_cents, spent_cents: t.spent_cents };
+    });
+    const cur = rows.filter((r) => r.m === m);
+    const t = computeTotals(cur, cats);
+    const unc = uncategorizedId(db);
+    const by_category = [...spendByCategory(cur, cats)]
+      .filter(([, v]) => v > 0).map(([category_id, spent_cents]) => ({ category_id, spent_cents }))
+      .sort((a, b) => b.spent_cents - a.spent_cents || a.category_id - b.category_id);
+    const body: SummaryResponse = {
+      month: m, income_cents: t.income_cents, spent_cents: t.spent_cents, net_cents: t.net_cents,
+      income_count: t.income_count, spent_count: t.spent_count,
+      uncategorized_count: cur.filter((r) => r.category_id === unc).length,
+      ...expectedTotals(db, m, today()), // §6.4; never added to the totals above
+      by_category, series,
+    };
+    res.json(body);
+  });
+
+  // ---- budgets (slice 2) ----
+  const budgetsFor = (m: string): BudgetsResponse => {
+    const cats = allCats();
+    const spend = spendByCategory(db.prepare("SELECT amount_cents, category_id FROM transactions WHERE date BETWEEN ? AND ?")
+      .all(`${m}-01`, `${m}-31`) as any[], cats);
+    const set = new Map((db.prepare("SELECT category_id, amount_cents FROM budgets WHERE month = ?").all(m) as any[])
+      .map((b) => [b.category_id as number, b.amount_cents as number]));
+    const items = (db.prepare("SELECT id FROM categories ORDER BY sort_order, id").all() as { id: number }[])
+      .map(({ id }) => cats.find((c) => c.id === id)!)
+      .filter((c) => !c.excluded_from_totals && c.system_key !== "income" && c.system_key !== "uncategorized")
+      .map((c) => ({ category_id: c.id, budget_cents: set.get(c.id) ?? null, spent_cents: Math.max(0, spend.get(c.id) ?? 0) }));
+    return {
+      month: m, items,
+      total_budget_cents: items.reduce((s, i) => s + (i.budget_cents ?? 0), 0),
+      spent_cents: items.reduce((s, i) => s + i.spent_cents, 0),
+    };
+  };
+  api.get("/budgets", (req, res) => { res.json(budgetsFor(month(req.query.month))); });
+  api.put("/budgets", (req, res) => {
+    const b = obj(req.body);
+    const m = month(b.month);
+    const cid = mustCategory(b.category_id);
+    const amt = int(b.amount_cents, "amount_cents");
+    if (amt < 0) throw bad("Budget can't be negative.");
+    if (amt > 10_000_000_000) throw bad("Budget is too large.");
+    const c = catById(cid);
+    if (c.excluded_from_totals || c.system_key === "income" || c.system_key === "uncategorized")
+      throw bad(`${c.name} can't be budgeted.`);
+    if (amt === 0) db.prepare("DELETE FROM budgets WHERE month = ? AND category_id = ?").run(m, cid);
+    else db.prepare("INSERT INTO budgets (month, category_id, amount_cents) VALUES (?,?,?) ON CONFLICT(month, category_id) DO UPDATE SET amount_cents = excluded.amount_cents").run(m, cid, amt);
+    res.json(budgetsFor(m));
+  });
+  api.post("/budgets/copy", (req, res) => {
+    const m = month(obj(req.body).month);
+    const copied_count = db.prepare(`INSERT INTO budgets (month, category_id, amount_cents)
+      SELECT ?, b.category_id, b.amount_cents FROM budgets b JOIN categories c ON c.id = b.category_id
+      WHERE b.month = ? AND c.excluded_from_totals = 0 AND (c.system_key IS NULL OR c.system_key NOT IN ('income','uncategorized'))
+      ON CONFLICT(month, category_id) DO UPDATE SET amount_cents = excluded.amount_cents`).run(m, addMonths(m, -1)).changes;
+    res.json({ copied_count, budgets: budgetsFor(m) });
+  });
+
+  // ---- recurring (slice 3) ----
+  api.get("/recurring", (_req, res) => { res.json(listRecurring(db, today())); });
+  api.get("/recurring/upcoming", (req, res) => { res.json(upcomingFor(db, month(req.query.month), today())); });
+  api.post("/recurring", (req, res) => { res.status(201).json(createRecurring(db, req.body, today())); });
+  api.patch("/recurring/:id", (req, res) => {
+    const r = updateRecurring(db, idParam(req), req.body, today());
+    if (!r) throw notFound("Recurring item not found.");
+    res.json(r);
+  });
+  api.delete("/recurring/:id", (req, res) => {
+    if (!db.prepare("DELETE FROM recurring_items WHERE id = ?").run(idParam(req)).changes) throw notFound("Recurring item not found.");
+    res.status(204).end();
   });
 
   // ---- imports ----

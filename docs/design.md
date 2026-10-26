@@ -3,14 +3,14 @@
 Source: claude.ai/design project `c1a59d7f-63ba-4a12-a3f7-a867b982bc10` ("Budget app layout selection"), pulled 2026-10-25.
 
 - `design/Budget.dc.html` — the clickable prototype (open in a browser; needs `design/support.js` beside it). The
-  logic class from line ~702 holds reference algorithms worth reusing: merchant-key normalization, recurring
+  logic class from line ~780 holds reference algorithms worth reusing: merchant-key normalization, recurring
   occurrence math, CSV preview parsing, duplicate detection, expected-item matching.
 - `design/README.md` — the handoff: exact tokens, copy, layout, component specs. **High fidelity: match it.**
 - `design/support.js` — prototype runtime only. Do not port.
 
 ## Screen → app mapping
 
-| Prototype screen | App route | Backed by (see `docs/api.md` once written) |
+| Prototype screen | App route | Backed by (see `docs/api.md`) |
 |---|---|---|
 | App shell: top bar, nav, month picker, theme toggle | layout for every route | month is a `?month=YYYY-MM` URL param; theme in `localStorage` |
 | Dashboard (tiles, income vs spending chart, upcoming recurring, spending by category, budget progress, first-run empty state) | `/` | monthly summary + recurring occurrences |
@@ -30,4 +30,5 @@ Source: claude.ai/design project `c1a59d7f-63ba-4a12-a3f7-a867b982bc10` ("Budget
 - **Money.** The prototype uses float dollars and budget strings. The app stores integer cents everywhere.
 - **Fonts.** Geist / Geist Mono are self-hosted from npm (`@fontsource`) instead of Google Fonts, so the app makes no
   third-party requests.
+- **Chart** is hand-rolled HTML/CSS bars (no chart library), matching the prototype's own approach.
 - **Not pulled:** `Budget Layouts.dc.html` (layout explorations). The chosen direction is 1d (top bar).

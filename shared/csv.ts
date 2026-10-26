@@ -47,6 +47,7 @@ export function parseDate(raw: string): string | null {
   else if ((mt = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})$/))) {
     m = +mt[1]; d = +mt[2]; y = mt[3].length === 2 ? 2000 + +mt[3] : +mt[3];
   } else return null;
+  if (y < 1900 || y > 2099) return null;
   const dt = new Date(Date.UTC(y, m - 1, d));
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
   return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;

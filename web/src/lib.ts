@@ -16,10 +16,14 @@ export function addMonth(m: string, d: number): string {
   return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
 }
 /** "2026-10-11" -> "Oct 11" (or "Oct 11, 2026" with year) */
-export function fmtDate(d: string, year = false): string {
+export function fmtDate(d: string | null | undefined, year = false): string {
+  if (!d || !/^\d{4}-\d{2}-\d{2}/.test(d)) return "—";
   const s = `${MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}`;
   return year ? `${s}, ${d.slice(0, 4)}` : s;
 }
+
+/** fmtDate that adds the year when it isn't the current year. */
+export const fmtDateY = (d: string | null | undefined) => fmtDate(d, !!d && d.slice(0, 4) !== String(new Date().getFullYear()));
 
 export const plural = (n: number, one: string, many = one + "s") => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 
@@ -63,4 +67,31 @@ export function txQuery(month: string, q: string, account: string, category: str
   if (/^\d+$/.test(account)) u.set("account", account);
   if (/^\d+$/.test(category) && validCategoryIds.includes(Number(category))) u.set("category", category);
   return `/transactions?${u}`;
+}
+
+/** Budget input text -> sanitized text: digits and one ".", max 2 decimals. */
+export function cleanDollars(s: string): string {
+  const t = s.replace(/[^\d.]/g, "");
+  const i = t.indexOf(".");
+  return i < 0 ? t : t.slice(0, i + 1) + t.slice(i + 1).replace(/\./g, "").slice(0, 2);
+}
+/** Sanitized dollars text -> integer cents via string math (no floats). Empty -> 0. */
+export function dollarsToCents(s: string): number {
+  const [w = "", f = ""] = s.split(".");
+  return Number(w || "0") * 100 + Number(f.padEnd(2, "0") || "0");
+}
+/** Cents -> input text: 45000 -> "450", 45050 -> "450.50", 0 -> "". */
+export function centsToInput(c: number): string {
+  if (!c) return "";
+  const w = Math.floor(c / 100), f = c % 100;
+  return f ? `${w}.${String(f).padStart(2, "0")}` : String(w);
+}
+/** Chart axis label: 150000 -> "$1.5k", 50000 -> "$500", 0 -> "$0". */
+export function axisLabel(cents: number): string {
+  const d = cents / 100;
+  return d >= 1000 ? `$${+(d / 1000).toFixed(1)}k` : `$${d}`;
+}
+/** y-axis step in cents (DB-5): max($500, ceil(max/4/$500) x $500). */
+export function axisStep(maxCents: number): number {
+  return Math.max(50000, Math.ceil(maxCents / 4 / 50000) * 50000);
 }

@@ -27,7 +27,7 @@ Every non-2xx response has this body:
 | 400 | `validation` | bad/missing body field, bad query param, rule merchant < 3 chars, amount 0 on a recurring item, etc. |
 | 400 | `invalid_file` | CSV rejected (spec IM-2 / edge 14). `message` is the user-facing copy: "This doesn't look like a CSV export.", "This file is too large (max 10 MB).", "This file has no transactions in it." |
 | 400 | `nothing_to_import` | commit would insert 0 rows (all duplicates). Nothing is written. |
-| 403 | `forbidden` | `Origin` header present and not localhost/127.0.0.1/[::1] (CSRF guard); deleting/renaming/excluding a locked or system category |
+| 403 | `forbidden` | `Origin` header present and not localhost/127.0.0.1/[::1] (CSRF guard); a `Host` header that isn't localhost/127.0.0.1/[::1] on any request (DNS-rebinding guard); deleting/renaming/excluding a locked or system category |
 | 404 | `not_found` | unknown id, or unknown `/api/*` route |
 | 409 | `conflict` | duplicate name (account, category), duplicate rule merchant on PATCH |
 | 413 | `payload_too_large` | body > 15 MB |
@@ -128,7 +128,7 @@ Occurrence = {                       // one expected/upcoming payment
 
 **GET `/api/rules`** -> 200 `Rule[]` sorted by `merchant`.
 
-**GET `/api/rules/impact?merchant=KEY`** -> 200 `{ "uncategorized_count": number }` — Uncategorized transactions, all months, whose `UPPER(description)` contains `KEY`. Backs the prompt line "Also fixes N other uncategorized transactions" (TX-7). Call it after the row's PATCH, so the edited row is already excluded.
+**GET `/api/rules/impact?merchant=KEY`** -> 200 `{ "uncategorized_count": number }` — Uncategorized transactions, all months, whose `UPPER(description)` contains `KEY`. Backs the prompt line "Also fixes N other uncategorized transactions" (TX-7). Call it after the row's PATCH, so the edited row is already excluded. `merchant` must be ≥ 3 chars (else 400).
 
 **POST `/api/rules`** — "create rule (and apply)". Body `{ "merchant": string, "category_id": number }` -> 201 `{ "rule": Rule, "applied_count": number }`. `merchant` is uppercased/trimmed server-side, ≥ 3 chars. If a rule with that merchant exists its category is replaced (still 201, same `id`). Always sweeps: every *Uncategorized* transaction (all months) whose `UPPER(description)` contains the merchant is set to `category_id`; `applied_count` is how many changed.
 
@@ -190,7 +190,7 @@ CSV transport: the client reads the file as UTF-8 text and sends it inside a JSO
 }
 ```
 `PreviewRow = { line: number, date: string, description: string, amount_cents: number, category_id: number, rule_merchant: string | null }` — `line` is the 1-based file line (the key for overrides at commit), `category_id` is the matching rule's category or Uncategorized, `rule_merchant` is that rule's merchant (drives the "rule" badge) else null. `description` is whitespace-normalized.
-- Errors: `400 invalid_file` (non-CSV content, NUL bytes, < 2 columns in every row, > 10 MB, no data rows). The `.csv` extension / size pre-checks are also done client-side.
+- Errors: `400 invalid_file` (non-CSV content, NUL bytes, < 2 columns in every row, any row > 200 columns, > 10 MB, no data rows). The `.csv` extension / size pre-checks are also done client-side.
 
 **POST `/api/imports`** — commit. Atomic: one SQLite transaction creates the account if new, saves the format if asked, inserts transactions, writes the `imports` row and `last_import_date`. Any failure writes nothing.
 ```json
@@ -213,7 +213,7 @@ Exactly one of `account_id` / `new_account` is set (400 otherwise). Overrides on
   "matched_recurring": [{ "recurring_id": 2, "name": "Paycheck", "date": "2026-10-24" }]
 }
 ```
-`uncategorized_count` = how many of the newly inserted rows are Uncategorized (the "Categorize J remaining" button). `matched_recurring` = active recurring occurrences that are received now and were not received before this import (IM-20; slice 3 fills it, `[]` until then). `import.new_count` is `M`, `skipped_count` is `K`. 400 `nothing_to_import` when 0 new rows; no import row is written.
+`uncategorized_count` = how many of the newly inserted rows are Uncategorized (the "Categorize J remaining" button). `matched_recurring` = active recurring occurrences that are received now and were not received before this import (IM-20; sorted by date then name). `import.new_count` is `M`, `skipped_count` is `K`. 400 `nothing_to_import` when 0 new rows; no import row is written.
 
 **GET `/api/imports`** -> 200 `ImportListItem[]`, newest first:
 `ImportRecord & { "account_name": string, "transaction_count": number }` (`transaction_count` = transactions currently carrying that `import_id`, for the undo confirmation).
@@ -248,7 +248,7 @@ Exactly one of `account_id` / `new_account` is set (400 otherwise). Overrides on
   "series": [{ "month": "2026-05", "income_cents": 480000, "spent_cents": 300000 }]
 }
 ```
-All totals per spec G6. `income_count` = Income-category transactions in the month ("N deposits"); `spent_count` = counted non-Income transactions ("N transactions"); `uncategorized_count` = Uncategorized in the month (DB-4). `by_category`: counted non-Income categories (Uncategorized included) with spending > 0, largest first (DB-7). `series`: 6 entries ascending, ending at `month` (`spent_cents` may be negative; the chart clamps at 0). `expected_*_cents` are the §6.4 values (slice 3 fills them; `0` until then) and are never added to the totals. The dashboard's empty state uses `has_transactions` from `/api/months`.
+All totals per spec G6. `income_count` = Income-category transactions in the month ("N deposits"); `spent_count` = counted non-Income transactions ("N transactions"); `uncategorized_count` = Uncategorized in the month (DB-4). `by_category`: counted non-Income categories (Uncategorized included) with spending > 0, largest first (DB-7). `series`: 6 entries ascending, ending at `month` (`spent_cents` may be negative; the chart clamps at 0). `expected_*_cents` are the §6.4 values and are never added to the totals. The dashboard's empty state uses `has_transactions` from `/api/months`.
 
 ### Budgets
 
@@ -265,7 +265,7 @@ All totals per spec G6. `income_count` = Income-category transactions in the mon
 
 **GET `/api/budgets?month=YYYY-MM`** -> 200 `BudgetsResponse`.
 
-**PUT `/api/budgets`** — body `{ "month": "2026-10", "category_id": 4, "amount_cents": 45000 }` -> 200 `BudgetsResponse`. `amount_cents` 0 deletes the row; negative -> 400.
+**PUT `/api/budgets`** — body `{ "month": "2026-10", "category_id": 4, "amount_cents": 45000 }` -> 200 `BudgetsResponse`. `amount_cents` 0 deletes the row; negative, over 10_000_000_000 ($100M), or an ineligible category -> 400. Months must be years 1900–2099 everywhere.
 
 **POST `/api/budgets/copy`** — body `{ "month": "2026-10" }` (the target; source = previous month) -> 200 `{ "copied_count": number, "budgets": BudgetsResponse }`. `copied_count` 0 when the previous month has none (nothing changes). Same-category values are overwritten, others left.
 

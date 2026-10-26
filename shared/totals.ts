@@ -16,6 +16,7 @@ export function computeTotals(
   for (const t of txs) {
     const c = byId.get(t.category_id);
     if (!c || c.excluded_from_totals) continue;
+    if (c.system_key === "uncategorized" && t.amount_cents > 0) continue; // G6: uncategorized deposits wait for a category
     if (c.system_key === "income") { income += t.amount_cents; incomeCount++; }
     else { other += t.amount_cents; spentCount++; }
   }
@@ -23,4 +24,20 @@ export function computeTotals(
     income_cents: income, spent_cents: -other, net_cents: income + other,
     income_count: incomeCount, spent_count: spentCount,
   };
+}
+
+/** Per-category spending (G6): counted, non-Income categories only; may be negative (refunds) — callers clamp. */
+export function spendByCategory(
+  txs: { amount_cents: number; category_id: number }[],
+  categories: TotalsCategory[],
+): Map<number, number> {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const out = new Map<number, number>();
+  for (const t of txs) {
+    const c = byId.get(t.category_id);
+    if (!c || c.excluded_from_totals || c.system_key === "income") continue;
+    if (c.system_key === "uncategorized" && t.amount_cents > 0) continue;
+    out.set(c.id, (out.get(c.id) ?? 0) - t.amount_cents);
+  }
+  return out;
 }

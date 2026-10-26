@@ -5,6 +5,7 @@ export const btnBase =
 export const btnPrimary = `${btnBase} bg-accent text-accent-ink hover:brightness-[1.08] disabled:hover:brightness-100`;
 export const btnSecondary = `${btnBase} bg-surface text-ink border border-line-strong hover:bg-surface-2`;
 export const btnDanger = `${btnBase} bg-neg text-white hover:brightness-[1.08]`;
+export const btnDangerText = "text-neg text-[13.5px] font-medium hover:underline bg-transparent border-0 px-2 py-[9px]";
 export const btnLink = "text-accent text-[13.5px] hover:underline bg-transparent border-0 p-0";
 export const inputCls =
   "rounded-[7px] border border-line-strong bg-surface text-ink px-[10px] py-[7px] text-[13.5px] placeholder:text-ink-3";
@@ -150,7 +151,11 @@ export function Select({
     else if (e.key === "End") items[items.length - 1]?.focus();
     else if (e.key === "Escape" || e.key === "Tab") {
       setPos(null);
-      if (e.key === "Escape") btn.current?.focus();
+      if (e.key === "Escape") {
+        btn.current?.focus();
+        e.preventDefault(); // else the surrounding <dialog> closes too
+        e.stopPropagation();
+      }
       return;
     } else return;
     e.preventDefault();
@@ -254,12 +259,22 @@ export function ConfirmDialog({ opts, onResolve }: { opts: ConfirmOpts | null; o
   );
 }
 
+/** popover="manual" puts the toast in the top layer so it shows above an open modal <dialog>. */
 export function Toast({ msg }: { msg: string | null }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current!;
+    const open = el.matches(":popover-open");
+    if (msg && !open) el.showPopover();
+    else if (!msg && open) el.hidePopover();
+  }, [msg]);
   return (
     <div
+      ref={ref}
+      popover="manual"
       role="status"
       aria-live="polite"
-      className={`pointer-events-none fixed bottom-6 left-1/2 z-[60] max-w-[calc(100%-32px)] -translate-x-1/2 rounded-[9px] bg-ink px-4 py-[10px] text-[13.5px] text-bg shadow-card transition-opacity ${msg ? "opacity-100" : "opacity-0"}`}
+      className="pointer-events-none fixed inset-auto bottom-6 left-1/2 m-0 max-w-[calc(100%-32px)] -translate-x-1/2 overflow-visible rounded-[9px] border-0 bg-ink px-4 py-[10px] text-[13.5px] text-bg shadow-card"
     >
       {msg}
     </div>

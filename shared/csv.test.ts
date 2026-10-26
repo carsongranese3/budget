@@ -113,6 +113,7 @@ describe("computeTotals (G6)", () => {
     { id: 1, excluded_from_totals: false, system_key: "income" as const },
     { id: 2, excluded_from_totals: false, system_key: null },
     { id: 3, excluded_from_totals: true, system_key: "transfer" as const },
+    { id: 4, excluded_from_totals: false, system_key: "uncategorized" as const },
   ];
   it("excludes Transfer, refunds reduce Spent", () => {
     const t = computeTotals([
@@ -120,5 +121,11 @@ describe("computeTotals (G6)", () => {
       { amount_cents: 1000, category_id: 2 }, { amount_cents: -90000, category_id: 3 },
     ], cats);
     expect(t).toEqual({ income_cents: 240000, spent_cents: 4000, net_cents: 236000, income_count: 1, spent_count: 2 });
+  });
+  it("uncategorized deposits are left out; uncategorized money-out still counts", () => {
+    const t = computeTotals([
+      { amount_cents: 240000, category_id: 4 }, { amount_cents: -3000, category_id: 4 },
+    ], cats);
+    expect(t).toEqual({ income_cents: 0, spent_cents: 3000, net_cents: -3000, income_count: 0, spent_count: 1 });
   });
 });

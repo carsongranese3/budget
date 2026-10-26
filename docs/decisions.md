@@ -40,3 +40,30 @@
 - Transactions query string is built by the pure `txQuery` in `web/src/lib.ts`; invalid or empty filters are omitted (treated as All).
 - When two accounts save the same header signature, a matching file is not auto-recognized; Step 2 asks for the account.
 - Open for slice 2: per G6, Uncategorized deposits net against "spent", so an uncategorized paycheck makes Spent negative. Revisit before the Dashboard tiles ship.
+
+## 2026-10-25 — Slice 2 start
+- **G6 change (user approved):** Uncategorized deposits (amount > 0) are excluded from Spent, Income and Net until categorized; Uncategorized money-out still counts as spending. Refunds in real categories still reduce Spent. Spec G6 updated; `shared/totals.ts` must follow. No contract change.
+- Work is committed on branch `build/v1` (slice 1 = 6a9d2cc); merge to `main` after v1.
+
+## 2026-10-25 — Slice 2 shipped (Dashboard, Budgets)
+- Gate: QA GO (G6 totals hand-verified to the cent across 8 months) + security GO. 86 Vitest tests.
+- Dashboard chart is hand-rolled HTML/CSS (native `<button>` per month for keyboard + aria), not Recharts — exact match to the design with less code.
+- Budgets: cap $100M per category; months limited to 1900–2099; "can't be budgeted" message and the footnote use current category names; copy skips ineligible categories; summary shows overage as a positive amount under "Over budget".
+- Follow-up fixes after the gate (footnote, save race, over-budget styling) were verified by build/tests only; slice 3 QA re-checks them in the browser.
+
+## 2026-10-25 — Slice 3 shipped (Recurring) — v1 feature-complete
+- Gate: QA GO (third pass; Row A heights measured at 1440/1100/800) + security GO. 114 Vitest tests.
+- Occurrence math lives in `shared/recurring.ts` (pure, `today` injected). `next_date` is always a string (anchor while in the future). Import matching (`newlyReceived`) only checks occurrences within ±4 days of an imported row, so decade-spanning CSVs stay fast.
+- CSV dates outside 1900–2099 are unreadable rows; server validation messages use human field labels.
+- Side panel and confirm are native `<dialog showModal>`; toasts are `popover="manual"` so they render above an open dialog. Esc inside a `Select` closes only the menu.
+- Dates outside the current year render with the year (`fmtDateY`).
+- When every recurring item is paused, the Dashboard card shows "No recurring items yet" (spec DB-6), not "Nothing coming up."
+- Removed the unused `recharts` dependency (the chart is hand-rolled).
+
+## Shortcut ledger (from /ponytail-debt and builder reports)
+- `web/src/pages/Import.tsx:21` — review table renders 200 rows at a time (all rows still import). Upgrade: virtualize if it feels slow.
+- Account/category name uniqueness uses SQLite `NOCASE` (ASCII-only). Upgrade: if non-ASCII names collide unexpectedly.
+- Description matching for duplicates/rules runs a JS `ujs()` function in SQL (no index). Upgrade: if imports or rule application get slow (tens of thousands of rows).
+- Summary/budgets aggregate the window's rows in JS (reuses the shared G6 function) rather than in SQL. Upgrade: same trigger.
+- Origin allowlist accepts any loopback port; other local processes can call the API (they could already read the DB file). Upgrade: pin to 5173/5174 if the app ever runs alongside untrusted local web apps.
+- Recurring table scrolls horizontally below ~960px (per design: tables scroll inside cards).

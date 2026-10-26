@@ -1,6 +1,6 @@
 # Spec: Budget v1
 
-Status: draft for build · 2026-10-25 · Greenfield (no app code yet).
+Status: built (v1 feature-complete) · 2026-10-25.
 
 Read with:
 - `design/README.md` — visual source of truth (layout, tokens, copy, component specs). This spec references its sections ("README §Import") instead of repeating pixel values. Where this spec and the README disagree on **behavior**, this spec wins; on **visuals/copy**, the README wins.
@@ -20,11 +20,11 @@ Out (v1): manual "add transaction" form, editing transaction amount/date/descrip
 - **G2 Dates** are `YYYY-MM-DD` strings; months are `YYYY-MM`. "Today" = local date of the machine running the server. Date math (±4 days, +14 days) is done on calendar dates, not timestamps (no DST bugs).
 - **G3 Sign**: `amount_cents < 0` = money out, `> 0` = money in. `0` is allowed and has no effect on totals.
 - **G4 JSON field names are snake_case and identical to the DB column names in §3** (no camelCase mapping layer). Shared TS types in `shared/` use these same names.
-- **G5 Selected month** is the `?month=YYYY-MM` URL param and applies to every screen. Missing/invalid/out of range → current month. Allowed range: earliest month that has a transaction (or the current month if none) through current month + 1. Picker arrows disable at the ends.
+- **G5 Selected month** is the `?month=YYYY-MM` URL param and applies to every screen. Missing/invalid/out of range → current month (client-side; the API returns 400 for an invalid month). Allowed range: earliest month that has a transaction (or the current month if none) through current month + 1. Picker arrows disable at the ends.
 - **G6 Totals** (one shared function, used by Dashboard, Transactions subtitle, Budgets, chart):
   - A transaction counts only if its category has `excluded_from_totals = 0`.
   - `income_cents` = sum of `amount_cents` of counted transactions in the Income category (refunds/chargebacks of income reduce it).
-  - `spent_cents` = −(sum of `amount_cents` of counted transactions in every other category, including Uncategorized). A refund (+) in Dining reduces Spent.
+  - `spent_cents` = −(sum of `amount_cents` of counted transactions in every other category, including Uncategorized money-out). A refund (+) in Dining reduces Spent. **Uncategorized deposits (amount > 0) are left out of Spent, Income and Net** until the user categorizes them; they still count toward the Uncategorized count/tile. (Changed 2026-10-25 — an uncategorized paycheck made Spent negative.)
   - `net_cents` = `income_cents − spent_cents`.
   - Per-category spending = −(sum of that category's amounts); for budgets/bars it is clamped at ≥ 0.
 - **G7 No third-party requests**: fonts self-hosted, no CDN, no telemetry. Theme in `localStorage` key `budget.theme` (`light`|`dark`); initial value follows `prefers-color-scheme`.
@@ -111,7 +111,7 @@ Indexes on `(account_id, date, amount_cents)`, `date`, `import_id`.
 |---|---|---|
 | month | text | `YYYY-MM` |
 | category_id | int FK | |
-| amount_cents | int | > 0. Setting 0 or empty deletes the row |
+| amount_cents | int | > 0 and ≤ 10_000_000_000 ($100M). Setting 0 or empty deletes the row |
 
 Primary key `(month, category_id)`.
 
@@ -151,7 +151,7 @@ Data: totals for the selected month, 6-month income/spend series, spending by ca
 - DB-2 Spent tile = `spent_cents`. Sub-line: "+$X expected, not imported yet" when expected spending > 0, else "N transactions" (count of counted, non-Income transactions).
 - DB-3 Net tile shows "+$X" / "−$X". Sub-line "N% of income kept" = round(net / income × 100); when income is 0 the sub-line is "—".
 - DB-4 Uncategorized tile shows the month's Uncategorized count; when > 0 it has the amber treatment. Clicking it opens `/transactions?month=…&category=<uncategorized id>`.
-- DB-5 Income vs spending chart (Recharts) shows 6 months ending at the selected month, paired bars, y-axis gridlines at quarters with step = max($500, ceil(max/4/$500)×$500) labelled "$0, $1.5k…". Selected month at full opacity, others 0.45. Hover updates the caption "<Month> — income $… · spending $…"; click selects that month (if within G5 range).
+- DB-5 Income vs spending chart (hand-rolled HTML/CSS bars) shows 6 months ending at the selected month, paired bars, y-axis gridlines at quarters with step = max($500, ceil(max/4/$500)×$500) labelled "$0, $1.5k…". Selected month at full opacity, others 0.45. Hover updates the caption "<Month> — income $… · spending $…"; click selects that month (if within G5 range).
 - DB-6 Upcoming recurring card: first the "Expected this month, not imported yet" rows (dashed border, dimmed amount, "Expected Oct 22 · <account>"), then the next 10 occurrences strictly after today across all active items, sorted by date then name, each "Due Nov 1 · <account>". The list scrolls inside the card. "Manage" goes to Recurring. No active items → "No recurring items yet" with "Manage" link.
 - DB-7 Spending by category: one bar per counted, non-Income category with spending > 0 in the month, largest first, bar width relative to the largest.
 - DB-8 Budget progress: one row per category with a budget this month (eligible per §4.4), "$spent / $budget", bar accent / amber at ≥ 85% / red when spent > budget; notes "$X left" (amber, near) or "Over by $X" (red). "Edit budgets" link to Budgets. No budgets → "No budgets for <Month>" + "Set budgets" link.
@@ -186,7 +186,7 @@ Flow: Upload → (Set up file, only if format not recognized) → Review → Don
 - IM-2 Non-`.csv` extension, file > 10 MB, binary content (contains NUL bytes) or fewer than 2 columns in every row → stay on step 1 with an inline error: "This doesn't look like a CSV export." / "This file is too large (max 10 MB)." Other selected files continue.
 - IM-3 "Use a sample Chase export" loads a bundled sample CSV (generated, dated around today) through the same pipeline.
 - IM-4 Recent imports card lists the import log newest first: file name (mono), account name, date, "41 new / 18 skipped" (+ " / 2 unreadable" when > 0), and an "Undo" text link (red, right-aligned) on every row. Empty → card hidden.
-- IM-5 If the file's header signature equals exactly one account's saved `csv_format.header_signature`, go straight to Review with that account and format and show "Recognized your saved format for this file — no setup needed." If it matches more than one account, show Step 2 pre-filled with the saved format and no account pre-selected.
+- IM-5 If the file's header signature equals exactly one account's saved `csv_format.header_signature`, go straight to Review with that account and format and show "Recognized your saved format for this file — no setup needed." If it matches more than one account, show Step 2 pre-filled with the saved format and no account pre-selected. The recognized banner has a "Change setup" link back to Step 2 (prefilled), because a generic header can match the wrong account's format.
 - IM-24 **Undo import.** "Undo" opens a confirmation (G8): "Undo import of <file_name>? N transactions will be removed, including any you've recategorized. Rules, accounts and saved formats are kept." (N = current count of transactions with that `import_id`.) On confirm, in one SQLite transaction: delete every transaction with that `import_id` — **recategorized ones included** — delete the `imports` row, and recompute that account's `last_import_date` (latest remaining import for the account, else null). Rules, accounts, `csv_format`, categories, budgets and recurring items are untouched. The row disappears from Recent imports; toast "Import undone · N transactions removed". Cancel changes nothing.
 - IM-25 After an undo, everything derived re-computes: totals, badge, recurring status (an occurrence received only by an undone transaction goes back to Expected), the G5 month range (falls back to current month if the selected month is now out of range), and the first-run state if no transactions remain. Re-importing the same file afterwards imports all its rows as new.
 
@@ -221,7 +221,7 @@ Flow: Upload → (Set up file, only if format not recognized) → Review → Don
 Eligible categories: `excluded_from_totals = 0` and `system_key` not `income`/`uncategorized`.
 
 - BU-1 Table has one row per eligible category: Monthly budget input, Spent (G6, clamped ≥ 0), Remaining (budget − spent; red "−$X" when over; "—" when no budget), progress bar + % (accent / amber ≥ 85% / red over).
-- BU-2 The budget input accepts digits, one ".", up to 2 decimals; other characters are stripped. It saves ~400 ms after the last keystroke and on blur; empty or 0 deletes the budget for that month. Saved value persists after reload.
+- BU-2 The budget input accepts digits, one ".", up to 2 decimals; other characters are stripped. It saves ~400 ms after the last keystroke and on blur; empty or 0 deletes the budget for that month; over $100,000,000 is rejected. Saved value persists after reload.
 - BU-3 Summary: Total budget = sum of the month's budgets for eligible categories; Spent so far = sum of spending across **all** eligible categories (budgeted or not); Remaining = total − spent, or "Over budget" in red with the overage; bar and "N% of budget used · D days left in <Month>". D = days from today to month end inclusive of today for the current month; past months show "<Month> is over"; future months show "<Month> hasn't started".
 - BU-4 "Copy last month's budgets" copies all previous-month budget rows into the selected month (overwriting same-category values, leaving others), toast "Copied N budgets from <Month>". If the previous month has none: toast "No budgets in <Month> to copy", nothing changes. The button is primary when the selected month has no budgets.
 - BU-5 Footnote: "Income, Transfer and Uncategorized aren't budgeted." (Transfer's current name is used; other excluded categories also don't appear.)
@@ -252,8 +252,8 @@ Eligible categories: `excluded_from_totals = 0` and `system_key` not `income`/`u
 
 - **5.1 Decoding**: read as UTF-8; strip a leading BOM (`﻿`). Accept `\r\n`, `\n`, `\r` line endings.
 - **5.2 Tokenizing**: RFC 4180, comma delimiter. Fields may be double-quoted; inside quotes, `""` is a literal quote and commas/newlines are literal. Unquoted fields are trimmed. A row whose cells are all empty/whitespace is a **blank row** and is ignored silently (not counted anywhere).
-- **5.3 Header detection & signature**: the header row is the first non-blank row (within the first 15 non-blank rows) where no cell parses as a date or an amount and the next non-blank row has the same cell count and a cell that parses as a date. Rows above the header (bank preambles) are ignored. If none qualifies, the file has no header (`has_header = false`) and columns are labelled "Column 1…N". `header_signature` = header cells lowercased, trimmed, inner whitespace collapsed, joined with `|` (e.g. `details|posting date|description|amount|type|balance|check or slip #`); headerless files use `#columns=N`.
-- **5.4 Dates**: accept `M/D/YYYY`, `MM/DD/YYYY`, `M/D/YY` (→ 20YY), `YYYY-MM-DD`, `YYYY/MM/DD`. Values must be real calendar dates (e.g. `02/30/2026` fails). `date_format` = `YMD` if the date column's values start with 4 digits, else `MDY`. Day-first (`DD/MM`) is not supported.
+- **5.3 Header detection & signature**: the header row is the first non-blank row (within the first 15 non-blank rows) where no cell parses as a date or an amount and the next non-blank row has the same cell count (ignoring trailing empty cells — trailing commas) and a cell that parses as a date. Rows above the header (bank preambles) are ignored. If none qualifies, the file has no header (`has_header = false`) and columns are labelled "Column 1…N". `header_signature` = header cells lowercased, trimmed, inner whitespace collapsed, trailing empty cells dropped, joined with `|` (e.g. `details|posting date|description|amount|type|balance|check or slip #`); headerless files use `#columns=N`.
+- **5.4 Dates**: accept `M/D/YYYY`, `MM/DD/YYYY`, `M/D/YY` (→ 20YY), `YYYY-MM-DD`, `YYYY/MM/DD`. Values must be real calendar dates (e.g. `02/30/2026` fails) with years 1900–2099; anything else makes the row unreadable. `date_format` = `YMD` if the date column's values start with 4 digits, else `MDY`. Day-first (`DD/MM`) is not supported.
 - **5.5 Column auto-detection** (header names, case-insensitive; first match wins): Date ← `transaction date`, `trans date`, then any containing `date`; Description ← `description`, `payee`, `merchant`, `name`, `memo`, `details`; Amount ← containing `amount`; Debit ← `debit`, `withdrawal`; Credit ← `credit`, `deposit`. If Debit and Credit are both found and Amount isn't, both are mapped. Without a header (or no match): Date = first column whose values parse as dates, Amount = first other column whose values parse as amounts, Description = the remaining column with the longest average text. Everything else = Ignore.
 - **5.6 Sign mode detection**: Debit and Credit mapped → `debit_credit`; else if more than half of parsed amounts are negative → `purchases_negative`; else `purchases_positive`.
 - **5.7 Amounts → cents** (string parsing, no floats): strip `$`, `,`, spaces; `(x)` → negative; leading `-` or `+`, and `-$12.00` / `$-12.00`; 0–2 decimal places (`12`, `12.5`, `12.50`); more than 2 decimals or any other character → unparseable. Then:
@@ -301,7 +301,7 @@ Eligible categories: `excluded_from_totals = 0` and `system_key` not `income`/`u
 22. **Format remembered but wrong** (e.g. wrong sign convention): fix = Undo the bad import in Recent imports (IM-24) → "Forget format" for that account in Settings (ST-2) → re-import the file, which goes through Step 2 again. Any recategorizations made on the undone rows are lost (the confirmation says so); rules created from them remain and re-apply on re-import.
 23. **Multiple files at once**: processed sequentially; duplicates between file 1 and file 2 are caught because file 2 is previewed after file 1 commits.
 24. **Zero-amount rows**: imported; they don't affect totals.
-25. **Dates far in the past/future in a CSV**: imported as-is; the month range (G5) extends back to them; future-dated rows beyond next month are imported but not reachable via the picker in v1.
+25. **Dates far in the past/future in a CSV**: imported as-is (years outside 1900–2099 are unreadable); the month range (G5) extends back to them; future-dated rows beyond next month are imported but not reachable via the picker in v1.
 26. **Recurring with no account** or account later renamed: shows "—"/new name.
 27. **Monthly item on the 31st, yearly on Feb 29**: 6.1 clamping.
 28. **Two recurring items with overlapping match text** (e.g. "AMAZON" and "AMAZON PRIME"): each is matched independently; one transaction can satisfy both — accepted for v1.

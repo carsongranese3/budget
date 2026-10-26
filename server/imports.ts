@@ -5,6 +5,8 @@ import type {
   PreviewResponse, PreviewRow, SignMode, UndoImportResponse,
 } from "../shared/types.js";
 import { type DB, recomputeLastImport, toAccount, uncategorizedId } from "./db.js";
+import { addDays, newlyReceived } from "../shared/recurring.js";
+import { recurringItems, txsBetween } from "./recurring.js";
 import { HttpError, bad, int, notFound, obj, oneOf, str } from "./http.js";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -15,7 +17,7 @@ const invalid = (m: string) => new HttpError(400, "invalid_file", m);
 /** Validate + tokenize the uploaded text (IM-2, edge 14). */
 export function readCsv(fileName: unknown, content: unknown): { file_name: string; records: string[][] } {
   const file_name = str(fileName, "file_name", 1, 255);
-  if (typeof content !== "string") throw bad("content must be text.");
+  if (typeof content !== "string") throw bad("File content must be text.");
   if (Buffer.byteLength(content, "utf8") > MAX_BYTES) throw invalid("This file is too large (max 10 MB).");
   if (content.includes("\0")) throw invalid("This doesn't look like a CSV export.");
   const records = parseCsvText(content);
@@ -31,7 +33,7 @@ export function validateFormat(v: unknown): CsvFormat {
   if (!Array.isArray(f.column_roles) || f.column_roles.length > 200) throw bad("format.column_roles is invalid.");
   const column_roles = f.column_roles.map((r) => oneOf(r, "column role", ROLES));
   if (typeof f.header_signature !== "string" || f.header_signature.length > 5000) throw bad("format.header_signature is invalid.");
-  if (typeof f.has_header !== "boolean") throw bad("format.has_header must be a boolean.");
+  if (typeof f.has_header !== "boolean") throw bad("Header setting must be true or false.");
   return {
     header_signature: f.header_signature, column_roles,
     sign_mode: oneOf(f.sign_mode, "sign_mode", SIGNS),
@@ -147,13 +149,13 @@ export function commit(db: DB, body: unknown): CommitImportResponse {
   const { file_name, records } = readCsv(b.file_name, b.content);
   const format = validateFormat(b.format);
   if (!formatComplete(format)) throw bad("The column setup is incomplete.");
-  if (typeof b.save_format !== "boolean") throw bad("save_format must be a boolean.");
+  if (typeof b.save_format !== "boolean") throw bad("Save format must be true or false.");
   const hasId = b.account_id !== undefined && b.account_id !== null;
   const hasNew = b.new_account !== undefined && b.new_account !== null;
   if (hasId === hasNew) throw bad("Provide exactly one of account_id or new_account.");
   const overrides = new Map<number, number>();
   if (b.category_overrides !== undefined) {
-    if (!Array.isArray(b.category_overrides) || b.category_overrides.length > 200000) throw bad("category_overrides must be a list.");
+    if (!Array.isArray(b.category_overrides) || b.category_overrides.length > 200000) throw bad("Category overrides must be a list.");
     for (const o of b.category_overrides) {
       const x = obj(o);
       overrides.set(int(x.line, "line"), int(x.category_id, "category_id"));
@@ -194,6 +196,8 @@ export function commit(db: DB, body: unknown): CommitImportResponse {
        VALUES (?,?,?,?,?,?,?,?,?)`,
     ).run(file_name, acctId, now, rows.length, fresh.length, dupes.length, unreadable.length, dates[0], dates[dates.length - 1]).lastInsertRowid);
 
+    const recItems = recurringItems(db).filter((i) => i.active);
+    const before = txsBetween(db, addDays(dates[0], -8), addDays(dates[dates.length - 1], 8)); // pre-import, for IM-20
     const match = makeRuleMatcher(db);
     const unc = uncategorizedId(db);
     const ins = db.prepare(
@@ -211,7 +215,7 @@ export function commit(db: DB, body: unknown): CommitImportResponse {
       import: db.prepare("SELECT * FROM imports WHERE id = ?").get(impId) as ImportRecord,
       account: toAccount(db.prepare("SELECT * FROM accounts WHERE id = ?").get(acctId)),
       uncategorized_count: uncCount,
-      matched_recurring: [], // slice 3
+      matched_recurring: newlyReceived(recItems, before, fresh),
     };
   })();
 }

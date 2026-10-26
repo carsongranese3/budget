@@ -1,10 +1,6 @@
 # Project: Budget
 > **Team:** carson-team — agent files in `~/.claude/agents/carson-team/`.
 
-> Drop this file at the repo root. It is the single briefing every agent reads.
-> Fill in the bracketed sections per project. The agent files in `~/.claude/agents/`
-> stay generic; this file is what makes the team build *this* app.
-
 ## What this app is
 A personal, local-only budgeting app for one user. Purchases and income come in by importing bank/credit-card
 CSV statement exports (no manual-entry-first workflow), get auto-categorized by merchant rules that the app learns
@@ -15,7 +11,8 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
 - Language / runtime: TypeScript, Node 20
 - Backend framework: Express + SQLite (`better-sqlite3`, single local DB file, git-ignored)
 - Frontend framework: React + Vite (Vite dev server proxies `/api` to the Express server)
-- Styling: Tailwind CSS; charts with Recharts
+- Styling: Tailwind CSS v4 (design tokens as CSS variables in `web/src/index.css`); the one chart is hand-rolled
+  HTML/CSS (no chart library); Geist fonts self-hosted via `@fontsource`
 - Hosting target: none — runs locally on the user's machine (`localhost`). No auth, no cloud.
 
 ## Data sources
@@ -41,7 +38,10 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
 ## Where things live
 - Specs: `specs/`
 - API / endpoint docs: `docs/api.md`
-- Normalized data shapes: `docs/data-shapes.md`
+- Normalized data shapes: `docs/data-shapes.md` — not used: the app has no external data sources; the data model is
+  in `specs/budget-v1.md` and `shared/types.ts`
+- Pure shared logic: `shared/` (`csv.ts`, `merchant.ts`, `totals.ts`, `recurring.ts`); server routes in `server/app.ts`
+  (+ `imports.ts`, `recurring.ts`), schema/migrations in `server/db.ts`; pages in `web/src/pages/`
 - Decisions log: `docs/decisions.md`
 - Design reference, if a prototype was provided: `design/` (pulled files) + `docs/design.md` (mapping)
 
@@ -53,6 +53,7 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
   API tests bind a loopback port; in the Claude Code sandbox that needs `sandbox.network.allowLocalBinding: true`.
 - Typecheck: `npm run typecheck`
 - Build: `npm run build` (vite build + typecheck)
+- `npm start` runs the API only (no static hosting of `dist/`); use `npm run dev` to use the app.
 
 ---
 
