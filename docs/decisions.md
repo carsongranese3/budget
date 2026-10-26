@@ -77,3 +77,18 @@
 - **Other (Budgets page only):** a final row whose Spent = sum of eligible categories with no budget that month (per-item clamped), with its own monthly budget stored in a new `other_budgets(month PK, amount_cents > 0)` table (migration 2). Not a category: can't be assigned to transactions; Dashboard budget progress ignores it.
 - Contract: `BudgetsResponse.other = { budget_cents|null, spent_cents }`; `total_budget_cents` includes Other's budget; top-level `spent_cents` unchanged (already includes unbudgeted spend). `PUT /api/budgets` with `category_id: null` sets Other (missing `category_id` is still 400). Copy last month includes Other and counts it in `copied_count`. Erase-all clears `other_budgets`.
 - **Settings "Data" section removed** at the user's request (no Load sample data / Erase all data buttons). `POST /api/sample-data` and `DELETE /api/data` stay in the API — tests and QA use them to set up throwaway DBs. Supersedes spec ST-8/ST-9 as UI.
+
+## 2026-10-26 — Smarter rule suggestions + editable rule text
+- Rules still match by plain substring of `UPPER(description)`; `merchantKey` only produces the *suggested* text. So the suggestion must always be a contiguous substring of the uppercased description (strip from the ends only; never rewrite inner text).
+- `merchantKey` now strips: leading processor prefixes (`SQ *`, `TST*`, `PL*`, `PYL*`, `PAYPAL *`, `PY *`…), and from the right: dates (`MM/DD`), phone numbers, reference codes and everything after them (`WEB ID:`, `PPD ID:`, `TRANSACTION#:`, Zelle codes), trailing store numbers in forms like `#425`, `0092`, `F38545`, `Q26`, `T-3250`, and a trailing city + 2-letter state.
+- `&amp;` is NOT decoded (stored descriptions keep it; decoding would break substring matching and duplicate detection on re-import). The user can edit the rule text instead.
+- The Transactions rule prompt shows the suggested text in an editable box; the "Also fixes N" count refreshes as they type (debounced); Create rule disabled under 3 characters; Enter creates, Esc dismisses.
+- Existing rules are not rewritten automatically; cleanup is offered to the user separately.
+- Also strips a `UBR*` prefix and a doubled trailing city (`… AUSTIN AUSTIN`). Known limit: city/state is only stripped after a digit/date cut, so `SQ *JOE'S AUSTIN TX` suggests `JOE'S AUSTIN TX` (user edits the box).
+- On real data (local check, not committed): 235 distinct descriptions → 130 suggestions, all substrings of their description.
+- Prompt closes before the POST (focus returns to the row's category button); a failed save shows the error toast and the edited text is lost — re-pick the category to get the prompt back.
+
+## 2026-10-26 — Settings "Reapply rules" button
+- Settings → Rules gets a "Reapply rules" button. It runs every rule over all **Uncategorized** transactions (all months) using the same precedence as import (longest merchant first, then newest); already-categorized transactions are never changed. No confirmation needed (only fills in Uncategorized).
+- Contract: `POST /api/rules/apply` (body `{}`) → 200 `{ "applied_count": number }`. Toast "Rules applied · N transactions categorized" (or "No uncategorized transactions matched a rule").
+- A rule whose category is Uncategorized never counts as applied (QA fix).

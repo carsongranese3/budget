@@ -10,7 +10,7 @@ import { useApp } from "../app";
 import { fmtDate, money, monthLabel, plural, txQuery } from "../lib";
 import { btnLink, btnPrimary, btnSecondary, Card, EmptyState, inputCls, Loading, LoadErr, PageHead, Select } from "../ui";
 
-interface Prompt { id: number; key: string; catId: number; impact: number }
+interface Prompt { id: number; key: string; text: string; catId: number; impact: number }
 
 export default function Transactions() {
   const { month, months, categories, accounts, to, toast, fail, refreshBadge, reload } = useApp();
@@ -44,6 +44,18 @@ export default function Transactions() {
     return () => clearTimeout(t);
   }); // eslint-disable-line
   useEffect(() => setPrompt(null), [path]);
+  // Live "also fixes N" for the edited rule text; the functional update drops responses for text/prompt that is no longer current.
+  const pId = prompt?.id, pText = prompt?.text.trim() ?? "";
+  useEffect(() => {
+    if (pId === undefined || pText.length < 3) return;
+    const t = setTimeout(async () => {
+      try {
+        const imp = await api<RuleImpactResponse>(`/rules/impact?merchant=${encodeURIComponent(pText)}`);
+        setPrompt((p) => (p && p.id === pId && p.text.trim() === pText ? { ...p, impact: imp.uncategorized_count } : p));
+      } catch { /* count is informational; Create rule still works */ }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [pId, pText]);
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const acctById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
@@ -61,20 +73,27 @@ export default function Transactions() {
       const key = merchantKey(t.description);
       const hasRule = rulesQ.data?.some((r) => r.merchant === key && r.category_id === catId);
       if (catId !== uncat.id && catId !== t.category_id && key.length >= 3 && !hasRule) {
-        const imp = await api<RuleImpactResponse>(`/rules/impact?merchant=${encodeURIComponent(key)}`);
-        setPrompt({ id: t.id, key, catId, impact: imp.uncategorized_count });
+        setPrompt({ id: t.id, key, text: key, catId, impact: 0 }); // count arrives via the debounced effect
       }
     } catch (e) {
       fail(e);
     }
   }
 
-  async function createRule(p: Prompt) {
+  // Close the prompt and return focus to that row's category trigger.
+  const dismiss = (el: HTMLElement) => {
+    el.closest("tr")?.previousElementSibling?.querySelector<HTMLElement>("button")?.focus();
+    setPrompt(null);
+  };
+
+  async function createRule(p: Prompt, el: HTMLElement) {
+    const text = p.text.trim();
+    if (text.length < 3) return;
+    dismiss(el);
     setBusy(true);
     try {
-      const r = await api<CreateRuleResponse>("/rules", "POST", { merchant: p.key, category_id: p.catId });
-      setPrompt(null);
-      toast(`Rule created: ${p.key} → ${catById.get(p.catId)?.name}${r.applied_count > 0 ? ` · applied to ${r.applied_count} more` : ""}`);
+      const r = await api<CreateRuleResponse>("/rules", "POST", { merchant: text, category_id: p.catId });
+      toast(`Rule created: ${text} → ${catById.get(p.catId)?.name}${r.applied_count > 0 ? ` · applied to ${r.applied_count} more` : ""}`);
       tx.reload();
       rulesQ.reload();
       reload();
@@ -186,12 +205,28 @@ export default function Transactions() {
                           <td colSpan={5} className="px-3 py-2">
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[9px] bg-accent-soft px-3 py-2 text-[13.5px]">
                               <span>
-                                Always categorize <b>{prompt.key}</b> as <b>{catById.get(prompt.catId)?.name}</b>?
-                                {prompt.impact > 0 && <span className="text-ink-2"> Also fixes {plural(prompt.impact, "other uncategorized transaction")}.</span>}
+                                Always categorize{" "}
+                                <input
+                                  aria-label="Rule text"
+                                  value={prompt.text}
+                                  maxLength={100}
+                                  spellCheck={false}
+                                  autoComplete="off"
+                                  style={{ width: `${Math.max(10, prompt.text.length + 3)}ch` }}
+                                  className={`${inputCls} max-w-full !px-2 !py-[3px] align-middle font-mono text-[13px] uppercase`}
+                                  onChange={(e) => setPrompt({ ...prompt, text: e.target.value.toUpperCase(), impact: 0 })}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !busy) { e.preventDefault(); createRule(prompt, e.currentTarget); }
+                                    else if (e.key === "Escape") dismiss(e.currentTarget);
+                                  }}
+                                />{" "}
+                                as <b>{catById.get(prompt.catId)?.name}</b>?
+                                {prompt.text.trim().length < 3 && <span className="text-ink-2"> At least 3 characters</span>}
+                                {prompt.text.trim().length >= 3 && prompt.impact > 0 && <span className="text-ink-2"> Also fixes {plural(prompt.impact, "other uncategorized transaction")}.</span>}
                               </span>
                               <span className="flex gap-2">
-                                <button type="button" disabled={busy} className={`${btnPrimary} !px-3 !py-[5px]`} onClick={() => createRule(prompt)}>Create rule</button>
-                                <button type="button" className={`${btnSecondary} !px-3 !py-[5px]`} onClick={() => setPrompt(null)}>Just this once</button>
+                                <button type="button" disabled={busy || prompt.text.trim().length < 3} className={`${btnPrimary} !px-3 !py-[5px]`} onClick={(e) => createRule(prompt, e.currentTarget)}>Create rule</button>
+                                <button type="button" className={`${btnSecondary} !px-3 !py-[5px]`} onClick={(e) => dismiss(e.currentTarget)}>Just this once</button>
                               </span>
                             </div>
                           </td>

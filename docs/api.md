@@ -132,6 +132,8 @@ Occurrence = {                       // one expected/upcoming payment
 
 **POST `/api/rules`** — "create rule (and apply)". Body `{ "merchant": string, "category_id": number }` -> 201 `{ "rule": Rule, "applied_count": number }`. `merchant` is uppercased/trimmed server-side, ≥ 3 chars. If a rule with that merchant exists its category is replaced (still 201, same `id`). Always sweeps: every *Uncategorized* transaction (all months) whose `UPPER(description)` contains the merchant is set to `category_id`; `applied_count` is how many changed.
 
+**POST `/api/rules/apply`** — "Reapply rules" (Settings). Body `{}` -> 200 `{ "applied_count": number }`. One transaction: every *Uncategorized* transaction (all months) is set to the category of its matching rule, using import precedence (longest merchant first, then newest; substring of `UPPER(description)`). Categorized transactions are never touched. No rules or no matches -> `applied_count: 0`. Idempotent; a matching rule whose category is Uncategorized leaves the row alone and is not counted.
+
 **PATCH `/api/rules/:id`** — body (optional) `{ "merchant"?: string, "category_id"?: number }` -> 200 `Rule`. 409 on duplicate merchant. Never touches existing transactions.
 
 **DELETE `/api/rules/:id`** -> 204. Never touches existing transactions.
@@ -307,6 +309,7 @@ Recurring matches also surface in `POST /api/imports` (`matched_recurring`) and 
 | 1 | PATCH, DELETE | `/api/categories/:id` |
 | 1 | GET, POST | `/api/rules` |
 | 1 | GET | `/api/rules/impact` |
+| 1 | POST | `/api/rules/apply` |
 | 1 | PATCH, DELETE | `/api/rules/:id` |
 | 1 | GET | `/api/transactions`, `/api/transactions/uncategorized-count` |
 | 1 | PATCH | `/api/transactions/:id` |

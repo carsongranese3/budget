@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Account, AccountType, CategoryWithCounts, Rule } from "../../../shared/types";
+import type { Account, AccountType, ApplyRulesResponse, CategoryWithCounts, Rule } from "../../../shared/types";
 import { api, ApiFail, useGet } from "../api";
 import { useApp } from "../app";
 import { fmtDate, plural, SWATCHES } from "../lib";
@@ -9,10 +9,13 @@ const TYPES: { value: AccountType; label: string }[] = [
   { value: "checking", label: "Checking" }, { value: "credit_card", label: "Credit card" }, { value: "savings", label: "Savings" },
 ];
 
-function Section({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+function Section({ title, sub, action, children }: { title: string; sub?: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section aria-label={title}>
-      <h2 className="m-0 mb-1 text-[17px] font-semibold">{title}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h2 className="m-0 mb-1 text-[17px] font-semibold">{title}</h2>
+        {action}
+      </div>
       {sub && <p className="m-0 mb-3 text-[13.5px] text-ink-2">{sub}</p>}
       {!sub && <div className="h-2" />}
       <Card className="overflow-x-auto">{children}</Card>
@@ -58,7 +61,7 @@ export default function Settings() {
         <AddCategory />
       </Section>
 
-      <Section title="Rules" sub="Rules assign a category to imported transactions whose description contains the text.">
+      <Section title="Rules" action={<ReapplyRules disabled={!rules.data?.length} />} sub="Rules assign a category to imported transactions whose description contains the text.">
         {rules.error && !rules.data ? (
           <div className="p-4"><LoadErr msg={rules.error} retry={rules.reload} /></div>
         ) : !rules.data ? (
@@ -72,6 +75,29 @@ export default function Settings() {
         )}
       </Section>
     </>
+  );
+}
+
+function ReapplyRules({ disabled }: { disabled: boolean }) {
+  const { reload, toast, fail } = useApp();
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    setBusy(true);
+    try {
+      const { applied_count: n } = await api<ApplyRulesResponse>("/rules/apply", "POST", {});
+      toast(n === 0 ? "No uncategorized transactions matched a rule" : `Rules applied · ${plural(n, "transaction")} categorized`);
+      reload();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-[12.5px] text-ink-3">Fills in Uncategorized transactions only.</span>
+      <button type="button" className={`${btnSecondary} whitespace-nowrap`} disabled={disabled || busy} onClick={run}>{busy ? "Applying…" : "Reapply rules"}</button>
+    </div>
   );
 }
 

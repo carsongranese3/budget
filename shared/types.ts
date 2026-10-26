@@ -72,6 +72,7 @@ export interface UpdateCategoryRequest { name?: string; color?: string; excluded
 export interface RuleImpactResponse { uncategorized_count: number }
 export interface CreateRuleRequest { merchant: string; category_id: number }
 export interface CreateRuleResponse { rule: Rule; applied_count: number }
+export interface ApplyRulesResponse { applied_count: number }
 export interface UpdateRuleRequest { merchant?: string; category_id?: number }
 
 // Transactions

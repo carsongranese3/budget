@@ -164,6 +164,42 @@ describe("rules", () => {
     const p2 = await app.call("POST", "/api/imports/preview", { file_name: "b.csv", content: csv2, account_id: 1, format: fmtOf(csv2) });
     expect(p2.body.review.new_rows[0].rule_merchant).toBe("BBB");
   });
+  it("POST /rules/apply: all months, precedence, never categorized, idempotent, 415", async () => {
+    await seed();
+    const groc = await catId("Groceries"), dining = await catId("Dining"), shop = await catId("Shopping");
+    const csv = "Date,Description,Amount\n9/5/2026,TRADER JOE'S #7,-1\n";
+    await app.call("POST", "/api/imports", importBody("p.csv", csv, { account_id: 1, new_account: null }));
+    expect((await app.call("POST", "/api/rules/apply", {})).body).toEqual({ applied_count: 0 }); // no rules
+    await app.call("POST", "/api/rules", { merchant: "TRADER", category_id: groc });
+    await app.call("POST", "/api/rules", { merchant: "TRADER JOE'S ORGANIC", category_id: dining });
+    await app.call("POST", "/api/rules", { merchant: "SHELL", category_id: shop });
+    const unc = await catId("Uncategorized");
+    const all = async () => [...(await app.call("GET", "/api/transactions?month=2026-10")).body.transactions,
+      ...(await app.call("GET", "/api/transactions?month=2026-09")).body.transactions];
+    for (const t of await all()) await app.call("PATCH", `/api/transactions/${t.id}`, { category_id: unc });
+    const keep = (await all()).find((t: any) => t.description.startsWith("SHELL"));
+    await app.call("PATCH", `/api/transactions/${keep.id}`, { category_id: groc }); // categorized: untouched
+    const r = await app.call("POST", "/api/rules/apply", {});
+    expect(r.body).toEqual({ applied_count: 3 });
+    const by = Object.fromEntries((await all()).map((t: any) => [t.description, t.category_id]));
+    expect(by).toEqual({ "TRADER JOE'S #1": groc, "TRADER JOE'S ORGANIC #2": dining, "SHELL OIL 123": groc, "TRADER JOE'S #7": groc });
+    expect((await app.call("POST", "/api/rules/apply", {})).body).toEqual({ applied_count: 0 });
+    const bad = await fetch(`${app.base}/api/rules/apply`, { method: "POST", headers: { "content-type": "text/plain" }, body: "x" });
+    expect(bad.status).toBe(415);
+  });
+  it("POST /rules/apply: Uncategorized rule is not counted; longer-older beats shorter-newer", async () => {
+    await seed();
+    const groc = await catId("Groceries"), dining = await catId("Dining"), unc = await catId("Uncategorized");
+    await app.call("POST", "/api/rules", { merchant: "TRADER JOE'S ORGANIC", category_id: dining }); // longer, older
+    await app.call("POST", "/api/rules", { merchant: "TRADER", category_id: groc }); // shorter, newer
+    await app.call("POST", "/api/rules", { merchant: "SHELL", category_id: unc });
+    const txs = async () => (await app.call("GET", "/api/transactions?month=2026-10")).body.transactions;
+    for (const t of await txs()) await app.call("PATCH", `/api/transactions/${t.id}`, { category_id: unc });
+    expect((await app.call("POST", "/api/rules/apply", {})).body).toEqual({ applied_count: 2 });
+    const by = Object.fromEntries((await txs()).map((t: any) => [t.description, t.category_id]));
+    expect(by).toEqual({ "TRADER JOE'S #1": groc, "TRADER JOE'S ORGANIC #2": dining, "SHELL OIL 123": unc });
+    expect((await app.call("POST", "/api/rules/apply", {})).body).toEqual({ applied_count: 0 });
+  });
   it("PATCH conflict and DELETE don't touch transactions", async () => {
     await seed();
     const groc = await catId("Groceries");

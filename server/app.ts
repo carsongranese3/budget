@@ -1,14 +1,14 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { computeTotals, spendByCategory } from "../shared/totals.js";
 import type {
-  ApiError, BudgetsResponse, Category, SummaryResponse, CategoryWithCounts, MonthsResponse, Rule, Transaction, TransactionsResponse,
+  ApiError, ApplyRulesResponse, BudgetsResponse, Category, SummaryResponse, CategoryWithCounts, MonthsResponse, Rule, Transaction, TransactionsResponse,
 } from "../shared/types.js";
 import {
   CATEGORY_COUNTS_SQL, SWATCHES, type DB, eraseAll, localDate, toAccount, toCategory,
   toCategoryWithCounts, uncategorizedId,
 } from "./db.js";
 import { HttpError, bad, int, month, notFound, obj, oneOf, str } from "./http.js";
-import { commit, listImports, preview, undoImport } from "./imports.js";
+import { commit, listImports, makeRuleMatcher, preview, undoImport } from "./imports.js";
 import { createRecurring, expectedTotals, listRecurring, updateRecurring, upcomingFor } from "./recurring.js";
 import { loadSampleData, sampleCsv } from "./sample.js";
 
@@ -176,6 +176,23 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
       return { rule: ruleById(id)!, applied_count: applied };
     })();
     res.status(201).json(out);
+  });
+  api.post("/rules/apply", (_req, res) => {
+    const body: ApplyRulesResponse = {
+      applied_count: db.transaction(() => {
+        const match = makeRuleMatcher(db);
+        const unc = uncategorizedId(db);
+        const rows = db.prepare("SELECT id, description FROM transactions WHERE category_id = ?").all(unc) as { id: number; description: string }[];
+        const set = db.prepare("UPDATE transactions SET category_id = ? WHERE id = ?");
+        let n = 0;
+        for (const r of rows) {
+          const rule = match(r.description);
+          if (rule && rule.category_id !== unc) { set.run(rule.category_id, r.id); n++; }
+        }
+        return n;
+      })(),
+    };
+    res.json(body);
   });
   api.patch("/rules/:id", (req, res) => {
     const id = idParam(req);

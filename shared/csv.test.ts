@@ -98,14 +98,62 @@ describe("detectFormat / parseRows", () => {
 });
 
 describe("merchantKey", () => {
-  it.each([
+  const CASES = [
     ["Trader Joe's #552 San Francisco", "TRADER JOE'S"],
     ["AMZN Mktp US*MK1A2", "AMZN MKTP US"],
     ["CHIPOTLE 2291", "CHIPOTLE"],
     ["SHELL OIL 5744123", "SHELL OIL"],
     ["#123", ""],
     ["netflix.com", "NETFLIX.COM"],
-  ])("%s", (d, k) => expect(merchantKey(d)).toBe(k));
+    ["CHIPOTLE 0092 AUSTIN TX 08/20", "CHIPOTLE"],
+    ["PAYMENT TO CHASE CARD ENDING IN 5717 08/31", "PAYMENT TO CHASE CARD ENDING IN 5717"],
+    ["PL*PAYLEASE WEB PMTS B4PR89 WEB ID:", "PAYLEASE WEB PMTS"],
+    ["CITY OF AUSTIN T PAYMENTS 0334754924 WEB ID: 5746000085", "CITY OF AUSTIN T PAYMENTS"],
+    ["ONLINE TRANSFER TO SAV ...6417 TRANSACTION#: 123456", "ONLINE TRANSFER TO SAV"],
+    ["CHASE CREDIT CRD AUTOPAY PPD ID: 4760039224", "CHASE CREDIT CRD AUTOPAY"],
+    ["SQ *SMITHVILLE DONUT SMITHVILLE TX 09/19", "SMITHVILLE DONUT"],
+    ["SQ *THUNDERCLOUD 2801 S.", "THUNDERCLOUD"],
+    ["TST* PLUCKERS WING BAR -", "PLUCKERS WING BAR"],
+    ["TST*FOOD FOOD", "FOOD FOOD"],
+    ["PYL*VILLAS ON 26TH STR 866-7295327 TX 11/12", "VILLAS ON 26TH STR"],
+    ["MCDONALD'S F38545", "MCDONALD'S"],
+    ["WHATABURGER 347 Q26", "WHATABURGER"],
+    ["TARGET T-3250", "TARGET"],
+    ["TARGET 00032508", "TARGET"],
+    ["H-E-B #425", "H-E-B"],
+    ["RANDALLS #2471", "RANDALLS"],
+    ["WENDY'S 126", "WENDY'S"],
+    ["7-ELEVEN 25157", "7-ELEVEN"],
+    ["PANDA EXPRESS #2676", "PANDA EXPRESS"],
+    ["CHICK-FIL-A #02992", "CHICK-FIL-A"],
+    ["UT ATH TICKET OFFICE 512-4713333 TX 09/24", "UT ATH TICKET OFFICE"],
+    ["UBER TECHNOLOGIES, INC WILMINGTON DE 10/17", "UBER TECHNOLOGIES, INC"],
+    ["STORAGESCHOLARS.COM STORAGESCHOLA NC 04/24", "STORAGESCHOLARS.COM STORAGESCHOLA"],
+    ["ATM CASH DEPOSIT 02/02 2514 GUADALUPE ST AUSTIN TX", "ATM CASH DEPOSIT"],
+    ["Zelle payment to Jayden 30742642233", "ZELLE PAYMENT TO JAYDEN"],
+    ["Zelle payment to Kenny Howard JPM99ccyo9rk", "ZELLE PAYMENT TO KENNY HOWARD"],
+    ["Zelle payment from Steven Smith BACqw4iu2we9", "ZELLE PAYMENT FROM STEVEN SMITH"],
+    ["AMAZON MKTPL*AB12CD3", "AMAZON MKTPL"],
+    ["AMAZON.COM*RT4Y12", "AMAZON.COM"],
+    ["PAYPAL *SPOTIFY", "SPOTIFY"],
+    ["Payment Thank You-Mobile", "PAYMENT THANK YOU-MOBILE"],
+    ["WILD GREGS - AUSTIN AUSTIN", "WILD GREGS"],
+    ["COCA COLA AUSTIN AUSTIN", "COCA COLA"],
+    ["UBR* PENDING.UBER.CO SAN", "PENDING.UBER.CO SAN"],
+    ["WHOOP", "WHOOP"],
+    ["WINGSTOP", "WINGSTOP"],
+    ["ESPN", "ESPN"],
+    ["UT H&amp;F FOOD SERVICE", "UT H&AMP;F FOOD SERVICE"],
+  ];
+  it.each(CASES)("%s", (d, k) => expect(merchantKey(d)).toBe(k));
+
+  it("always returns a substring of the uppercased input (rules match by substring)", () => {
+    for (const d of [
+      ...CASES.map((c) => c[0]),
+      "Trader Joe's #552 San Francisco", "AMZN Mktp US*MK1A2", "#123", "7 UP 12", "A1 B2 TX 01/02",
+      "SQ *", "PAYMENT TO ME 12/31", "x".repeat(300) + " 123",
+    ]) expect(d.toUpperCase()).toContain(merchantKey(d));
+  });
 });
 
 describe("computeTotals (G6)", () => {
