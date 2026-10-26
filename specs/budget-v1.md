@@ -115,6 +115,11 @@ Indexes on `(account_id, date, amount_cents)`, `date`, `import_id`.
 
 Primary key `(month, category_id)`.
 
+### other_budgets
+| field | type | notes |
+|---|---|---|
+| month | text PK | `YYYY-MM`. Budget for "Other" = spending in categories without their own budget. Same amount rules as `budgets`; 0 deletes the row |
+
 ### imports (import log)
 | field | type | notes |
 |---|---|---|
@@ -128,7 +133,7 @@ Primary key `(month, category_id)`.
 | unreadable_count | int | rows that couldn't be parsed |
 | first_date / last_date | text \| null | range of inserted rows |
 
-Cascading deletes exist only for: category delete (ST-6), undo import (IM-24), Erase (ST-9). There is no account delete in v1.
+Cascading deletes exist only for: category delete (ST-6), undo import (IM-24), Erase (ST-9, API only). There is no account delete in v1.
 
 ## 4. Screens and flows
 
@@ -220,10 +225,10 @@ Flow: Upload → (Set up file, only if format not recognized) → Review → Don
 ### 4.4 Budgets (`/budgets`) — README §4
 Eligible categories: `excluded_from_totals = 0` and `system_key` not `income`/`uncategorized`.
 
-- BU-1 Table has one row per eligible category: Monthly budget input, Spent (G6, clamped ≥ 0), Remaining (budget − spent; red "−$X" when over; "—" when no budget), progress bar + % (accent / amber ≥ 85% / red over).
+- BU-1 Table has one row per eligible category, plus a final "Other" row ("Categories without their own budget"; budget saved via `category_id: null`, spent = eligible spending in categories with no budget that month): Monthly budget input, Spent (G6, clamped ≥ 0), Remaining (budget − spent; red "−$X" when over; "—" when no budget), progress bar + % (accent / amber ≥ 85% / red over).
 - BU-2 The budget input accepts digits, one ".", up to 2 decimals; other characters are stripped. It saves ~400 ms after the last keystroke and on blur; empty or 0 deletes the budget for that month; over $100,000,000 is rejected. Saved value persists after reload.
-- BU-3 Summary: Total budget = sum of the month's budgets for eligible categories; Spent so far = sum of spending across **all** eligible categories (budgeted or not); Remaining = total − spent, or "Over budget" in red with the overage; bar and "N% of budget used · D days left in <Month>". D = days from today to month end inclusive of today for the current month; past months show "<Month> is over"; future months show "<Month> hasn't started".
-- BU-4 "Copy last month's budgets" copies all previous-month budget rows into the selected month (overwriting same-category values, leaving others), toast "Copied N budgets from <Month>". If the previous month has none: toast "No budgets in <Month> to copy", nothing changes. The button is primary when the selected month has no budgets.
+- BU-3 Summary: Total budget = sum of the month's budgets for eligible categories plus the Other budget; Spent so far = sum of spending across **all** eligible categories (budgeted or not); Remaining = total − spent, or "Over budget" in red with the overage; bar and "N% of budget used · D days left in <Month>". D = days from today to month end inclusive of today for the current month; past months show "<Month> is over"; future months show "<Month> hasn't started".
+- BU-4 "Copy last month's budgets" copies all previous-month budget rows (including Other) into the selected month (overwriting same-category values, leaving others), toast "Copied N budgets from <Month>". If the previous month has none: toast "No budgets in <Month> to copy", nothing changes. The button is primary when the selected month has no budgets.
 - BU-5 Footnote: "Income, Transfer and Uncategorized aren't budgeted." (Transfer's current name is used; other excluded categories also don't appear.)
 - BU-6 Budgets of a category that becomes excluded are kept in the DB but not shown or counted; they reappear if it's un-excluded.
 
@@ -245,8 +250,8 @@ Eligible categories: `excluded_from_totals = 0` and `system_key` not `income`/`u
 - ST-5 Add category: trimmed non-empty unique name, next swatch color in rotation, inserted before Income, toast "Added X".
 - ST-6 **Delete category.** Only user categories (`system_key` null) show a red "Delete" text link; Income, Transfer and Uncategorized never do. Confirmation (G8): "Delete X? Its N transactions and M recurring items become Uncategorized, and its R rules and its budgets are removed." On confirm, in one SQLite transaction: transactions and recurring items with that category → Uncategorized; its rules and all its budget rows (every month) deleted; category deleted. Toast "Deleted X".
 - ST-7 Rules list: mono merchant chip → category dot + name, sorted by merchant. Edit inline (merchant input uppercased on save, ≥ 3 chars, unique; category dropdown; Save / Cancel; toast "Rule saved"). Delete removes it immediately with toast "Rule deleted". Editing or deleting a rule never changes existing transactions; it only affects future imports and future "Create rule" sweeps.
-- ST-8 Load sample data: confirmation (G8, "This replaces all your data with sample data.") when the DB has any transactions; then replaces all data with the seeded sample set (accounts, ~6 months of transactions ending today grouped into `imports` rows, rules, recurring items with anchors in the past, budgets), navigates to Dashboard, toast "Sample data loaded".
-- ST-9 Erase all data: confirmation (G8, "Erase all data? This deletes every transaction, account, rule, budget and recurring item on this laptop. This can't be undone.") then deletes all rows in all tables and re-seeds the default categories; navigates to Dashboard showing the first-run state (DB-9), toast "All data erased". Theme is kept.
+- ST-8 (removed from the UI; API kept) Load sample data: confirmation (G8, "This replaces all your data with sample data.") when the DB has any transactions; then replaces all data with the seeded sample set (accounts, ~6 months of transactions ending today grouped into `imports` rows, rules, recurring items with anchors in the past, budgets), navigates to Dashboard, toast "Sample data loaded".
+- ST-9 (removed from the UI; API kept) Erase all data: confirmation (G8, "Erase all data? This deletes every transaction, account, rule, budget and recurring item on this laptop. This can't be undone.") then deletes all rows in all tables and re-seeds the default categories; navigates to Dashboard showing the first-run state (DB-9), toast "All data erased". Theme is kept.
 
 ## 5. CSV parsing (shared pure module in `shared/`, used for preview and re-run by the server at commit)
 
@@ -287,8 +292,8 @@ Eligible categories: `excluded_from_totals = 0` and `system_key` not `income`/`u
 8. **Rule on a key that already has a rule with another category**: Create rule replaces the category (TX-8).
 9. **Recategorize to Uncategorized**: allowed, no prompt.
 10. **merchantKey empty or < 3 chars** (e.g. description "#123"): no prompt.
-11. **Erase all data**: ST-9; any in-progress import is discarded; returns first-run state.
-12. **Load sample data over real data**: confirmation required (ST-8).
+11. **Erase all data** (API only; no UI since 2026-10-26): ST-9; any in-progress import is discarded; returns first-run state.
+12. **Load sample data over real data** (API only; no UI since 2026-10-26): ST-8.
 13. **Very large CSV**: > 10 MB rejected (IM-2); up to 10,000 rows works (5.10); commit is one transaction so a crash mid-insert leaves nothing half-imported.
 14. **Wrong file type** (PDF, XLSX, image renamed .csv, empty file): IM-2 error; empty or header-only file → "This file has no transactions in it."
 15. **Re-import of the same file**: all rows duplicates → "0 new / N skipped", "Nothing to import" disabled; no import log entry is written.

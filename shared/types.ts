@@ -133,9 +133,12 @@ export interface SummaryResponse {
 export interface BudgetsResponse {
   month: string;
   items: { category_id: number; budget_cents: number | null; spent_cents: number }[];
+  /** Unbudgeted spend bucket: spent = items with no budget; budget_cents null when unset. */
+  other: { budget_cents: number | null; spent_cents: number };
   total_budget_cents: number; spent_cents: number;
 }
-export interface SetBudgetRequest { month: string; category_id: number; amount_cents: number }
+/** category_id null = the Other budget. */
+export interface SetBudgetRequest { month: string; category_id: number | null; amount_cents: number }
 export interface CopyBudgetsRequest { month: string }
 export interface CopyBudgetsResponse { copied_count: number; budgets: BudgetsResponse }
 

@@ -280,9 +280,13 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
       .map(({ id }) => cats.find((c) => c.id === id)!)
       .filter((c) => !c.excluded_from_totals && c.system_key !== "income" && c.system_key !== "uncategorized")
       .map((c) => ({ category_id: c.id, budget_cents: set.get(c.id) ?? null, spent_cents: Math.max(0, spend.get(c.id) ?? 0) }));
+    const other = {
+      budget_cents: ((db.prepare("SELECT amount_cents FROM other_budgets WHERE month = ?").get(m) as any)?.amount_cents ?? null) as number | null,
+      spent_cents: items.reduce((s, i) => s + (i.budget_cents == null ? i.spent_cents : 0), 0),
+    };
     return {
-      month: m, items,
-      total_budget_cents: items.reduce((s, i) => s + (i.budget_cents ?? 0), 0),
+      month: m, items, other,
+      total_budget_cents: items.reduce((s, i) => s + (i.budget_cents ?? 0), 0) + (other.budget_cents ?? 0),
       spent_cents: items.reduce((s, i) => s + i.spent_cents, 0),
     };
   };
@@ -290,10 +294,17 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
   api.put("/budgets", (req, res) => {
     const b = obj(req.body);
     const m = month(b.month);
-    const cid = mustCategory(b.category_id);
+    const isOther = b.category_id === null; // explicit null only; missing still 400s below
+    const cid = isOther ? 0 : mustCategory(b.category_id);
     const amt = int(b.amount_cents, "amount_cents");
     if (amt < 0) throw bad("Budget can't be negative.");
     if (amt > 10_000_000_000) throw bad("Budget is too large.");
+    if (isOther) {
+      if (amt === 0) db.prepare("DELETE FROM other_budgets WHERE month = ?").run(m);
+      else db.prepare("INSERT INTO other_budgets (month, amount_cents) VALUES (?,?) ON CONFLICT(month) DO UPDATE SET amount_cents = excluded.amount_cents").run(m, amt);
+      res.json(budgetsFor(m));
+      return;
+    }
     const c = catById(cid);
     if (c.excluded_from_totals || c.system_key === "income" || c.system_key === "uncategorized")
       throw bad(`${c.name} can't be budgeted.`);
@@ -303,7 +314,10 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
   });
   api.post("/budgets/copy", (req, res) => {
     const m = month(obj(req.body).month);
-    const copied_count = db.prepare(`INSERT INTO budgets (month, category_id, amount_cents)
+    const otherCopied = db.prepare(`INSERT INTO other_budgets (month, amount_cents)
+      SELECT ?, amount_cents FROM other_budgets WHERE month = ?
+      ON CONFLICT(month) DO UPDATE SET amount_cents = excluded.amount_cents`).run(m, addMonths(m, -1)).changes;
+    const copied_count = otherCopied + db.prepare(`INSERT INTO budgets (month, category_id, amount_cents)
       SELECT ?, b.category_id, b.amount_cents FROM budgets b JOIN categories c ON c.id = b.category_id
       WHERE b.month = ? AND c.excluded_from_totals = 0 AND (c.system_key IS NULL OR c.system_key NOT IN ('income','uncategorized'))
       ON CONFLICT(month, category_id) DO UPDATE SET amount_cents = excluded.amount_cents`).run(m, addMonths(m, -1)).changes;

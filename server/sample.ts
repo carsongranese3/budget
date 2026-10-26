@@ -160,6 +160,7 @@ export function loadSampleData(db: DB, today: string): void {
     for (let k = 5; k >= 0; k--) {
       const month = `${monthOf(k)[0]}-${pad(monthOf(k)[1])}`;
       for (const [n, c] of Object.entries(BUDGETS)) bud.run(month, cat(n), c);
+      db.prepare("INSERT INTO other_budgets (month, amount_cents) VALUES (?,?)").run(month, 15000);
     }
   })();
 }

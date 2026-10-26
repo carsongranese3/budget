@@ -10,3 +10,6 @@ data/*.db-*
 .claude/*.local.*
 .claude/.cc-writes/
 .playwright-mcp/
+
+# Local screenshots
+Screenshot *.png

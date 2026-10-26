@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import Database from "better-sqlite3";
 import http from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { detectFormat, parseCsvText } from "../shared/csv.js";
+import { openDb } from "./db.js";
 import { startApp } from "../test/helpers.js";
 
 const fx = (n: string) => readFileSync(new URL(`../test/fixtures/${n}`, import.meta.url), "utf8");
@@ -228,7 +233,7 @@ describe("data management", () => {
     expect((await app.call("POST", "/api/sample-data")).status).toBe(204);
     const m = (await app.call("GET", "/api/months")).body;
     expect(m).toMatchObject({ has_transactions: true, earliest_month: "2026-05" });
-    for (const t of ["accounts", "rules", "recurring_items", "budgets", "imports", "transactions"])
+    for (const t of ["accounts", "rules", "recurring_items", "budgets", "other_budgets", "imports", "transactions"])
       expect((app.db.prepare(`SELECT COUNT(*) n FROM ${t}`).get() as any).n).toBeGreaterThan(0);
     expect((app.db.prepare("SELECT COUNT(*) n FROM transactions WHERE date > '2026-10-25'").get() as any).n).toBe(0);
     expect((await app.call("POST", "/api/sample-data")).status).toBe(204); // replaces, no unique errors
@@ -241,6 +246,17 @@ describe("data management", () => {
     const cats = (await app.call("GET", "/api/categories")).body;
     expect(cats).toHaveLength(11);
     expect((await app.call("GET", "/api/accounts")).body).toEqual([]);
+    expect((app.db.prepare("SELECT COUNT(*) n FROM other_budgets").get() as any).n).toBe(0);
+  });
+  it("migration 2 applies on an existing v1 DB", () => {
+    const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mig-")), "b.db");
+    openDb(f).close();
+    const raw = new Database(f);
+    raw.exec("DROP TABLE other_budgets"); raw.pragma("user_version = 1"); raw.close();
+    const db = openDb(f);
+    expect(db.pragma("user_version", { simple: true })).toBe(2);
+    expect(db.prepare("SELECT COUNT(*) n FROM other_budgets").get()).toEqual({ n: 0 });
+    db.close();
   });
   it("rejects non-local Host headers", async () => {
     app = await startApp();

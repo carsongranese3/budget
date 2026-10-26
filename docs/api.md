@@ -257,17 +257,18 @@ All totals per spec G6. `income_count` = Income-category transactions in the mon
 {
   "month": "2026-10",
   "items": [{ "category_id": 4, "budget_cents": 45000, "spent_cents": 31240 }],
-  "total_budget_cents": 45000,
+  "other": { "budget_cents": 20000, "spent_cents": 8000 },
+  "total_budget_cents": 65000,
   "spent_cents": 31240
 }
 ```
-`budget_cents` is `null` when no budget is set. `items[].spent_cents` is clamped at ≥ 0. `total_budget_cents` = sum of the month's budgets over eligible categories; top-level `spent_cents` = spending across all eligible categories (BU-3). Items are in category `sort_order`. The Dashboard's budget progress uses the items with non-null `budget_cents`.
+`other` = the "Other" budget for unbudgeted spending: `other.spent_cents` = sum of `items[].spent_cents` where `budget_cents` is `null` (shrinks when a category gets its own budget); `other.budget_cents` is `null` when unset. `budget_cents` is `null` when no budget is set. `items[].spent_cents` is clamped at ≥ 0. `total_budget_cents` = sum of the month's budgets over eligible categories plus `other.budget_cents`; top-level `spent_cents` = spending across all eligible categories (BU-3). Items are in category `sort_order`. The Dashboard's budget progress uses the items with non-null `budget_cents`.
 
 **GET `/api/budgets?month=YYYY-MM`** -> 200 `BudgetsResponse`.
 
-**PUT `/api/budgets`** — body `{ "month": "2026-10", "category_id": 4, "amount_cents": 45000 }` -> 200 `BudgetsResponse`. `amount_cents` 0 deletes the row; negative, over 10_000_000_000 ($100M), or an ineligible category -> 400. Months must be years 1900–2099 everywhere.
+**PUT `/api/budgets`** — body `{ "month": "2026-10", "category_id": 4, "amount_cents": 45000 }` -> 200 `BudgetsResponse`. `amount_cents` 0 deletes the row; negative, over 10_000_000_000 ($100M), or an ineligible category -> 400. Months must be years 1900–2099 everywhere. `category_id: null` sets the Other budget (same amount rules: 0 deletes, negative / over cap -> 400); a missing `category_id` is still 400.
 
-**POST `/api/budgets/copy`** — body `{ "month": "2026-10" }` (the target; source = previous month) -> 200 `{ "copied_count": number, "budgets": BudgetsResponse }`. `copied_count` 0 when the previous month has none (nothing changes). Same-category values are overwritten, others left.
+**POST `/api/budgets/copy`** — body `{ "month": "2026-10" }` (the target; source = previous month) -> 200 `{ "copied_count": number, "budgets": BudgetsResponse }`. `copied_count` 0 when the previous month has none (nothing changes). Same-category values are overwritten, others left. The previous month's Other budget is copied too and counts 1 toward `copied_count`. Erase-all clears Other budgets.
 
 ---
 

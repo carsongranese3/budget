@@ -8,8 +8,8 @@ import { btnPrimary, btnSecondary, Card, Dot, EmptyState, LoadErr, Loading, Page
 const bar = (spent: number, bud: number) => (spent > bud ? "bg-neg" : spent * 100 >= bud * 85 ? "bg-warn" : "bg-accent");
 const grid = "grid grid-cols-[minmax(150px,1.2fr)_140px_110px_120px_minmax(140px,1.4fr)] gap-4";
 
-function Row({ month, catId, name, color, budget, spent, onSaved }: {
-  month: string; catId: number; name: string; color: string; budget: number | null; spent: number;
+function Row({ month, catId, name, color, sub, label, budget, spent, onSaved }: {
+  month: string; catId: number | null; name: string; color?: string; sub?: string; label?: string; budget: number | null; spent: number;
   onSaved: (b: BudgetsResponse) => void;
 }) {
   const { fail } = useApp();
@@ -60,17 +60,20 @@ function Row({ month, catId, name, color, budget, spent, onSaved }: {
   const bud = budget ?? 0;
   const pct = bud > 0 ? Math.round((spent / bud) * 100) : null;
   return (
-    <div className={`${grid} items-center border-b border-line px-[18px] py-2`}>
-      <div className="flex items-center gap-2 font-medium"><Dot color={color} size={8} />{name}</div>
+    <div className={`${grid} items-center border-b border-line px-[18px] py-2 ${color ? "" : "border-t border-t-line-strong"}`}>
+      <div className="flex items-center gap-2 font-medium">
+        {color ? <Dot color={color} size={8} /> : <span aria-hidden className="inline-block h-2 w-2 shrink-0 rounded-full border border-ink-3" />}
+        <span>{name}{sub && <span className="block text-xs font-normal text-ink-3">{sub}</span>}</span>
+      </div>
       <div>
         <label className={`flex w-[124px] items-center rounded-[7px] border bg-surface px-[10px] focus-within:outline-2 focus-within:outline-accent ${err ? "border-neg" : "border-line-strong"}`}>
           <span aria-hidden className="text-ink-3">$</span>
           <input
             inputMode="decimal"
             autoComplete="off"
-            aria-label={`${name} monthly budget in dollars`}
+            aria-label={label ?? `${name} monthly budget in dollars`}
             aria-invalid={!!err}
-            aria-describedby={err ? `err-${catId}` : undefined}
+            aria-describedby={err ? `err-${catId ?? "other"}` : undefined}
             placeholder="0"
             value={text}
             onChange={(e) => change(e.target.value)}
@@ -78,7 +81,7 @@ function Row({ month, catId, name, color, budget, spent, onSaved }: {
             className="w-full border-0 bg-transparent py-[7px] pl-[6px] text-right text-ink outline-none"
           />
         </label>
-        {err && <div id={`err-${catId}`} className="mt-1 text-xs text-neg">{err}</div>}
+        {err && <div id={`err-${catId ?? "other"}`} className="mt-1 text-xs text-neg">{err}</div>}
       </div>
       <div className="text-right">{money(spent)}</div>
       <div className={`text-right font-medium ${spent > bud ? "text-neg" : ""}`}>{bud > 0 || spent > 0 ? money(bud - spent) : "—"}</div>
@@ -110,7 +113,7 @@ export default function Budgets() {
     return <>{head()}{q.error ? <LoadErr msg={q.error} retry={q.reload} /> : <Loading />}</>;
   }
 
-  const hasAny = b.items.some((i) => i.budget_cents != null);
+  const hasAny = b.items.some((i) => i.budget_cents != null) || b.other.budget_cents != null;
   const prev = monthName(addMonth(month, -1));
   async function copy() {
     setBusy(true);
@@ -182,6 +185,8 @@ export default function Budgets() {
                   budget={i.budget_cents} spent={i.spent_cents} onSaved={onSaved} />
               ) : null;
             })}
+            <Row key={`${month}-other-${ver}`} month={month} catId={null} name="Other" sub="Categories without their own budget" label="Monthly budget for Other"
+              budget={b.other.budget_cents} spent={b.other.spent_cents} onSaved={onSaved} />
           </div>
         </div>
         <div className="px-[18px] py-3 text-[12.5px] text-ink-3">{unbudgeted} aren't budgeted.</div>

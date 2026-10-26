@@ -74,6 +74,10 @@ const MIGRATIONS = [
      amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
      PRIMARY KEY (month, category_id)
    );`,
+  `CREATE TABLE other_budgets (
+     month TEXT PRIMARY KEY,
+     amount_cents INTEGER NOT NULL CHECK (amount_cents > 0)
+   );`,
 ];
 
 export function openDb(file: string): DB {
@@ -112,7 +116,7 @@ export function seedCategories(db: DB): void {
 
 /** Delete every row in every table, then re-seed the default categories. */
 export function eraseAll(db: DB): void {
-  for (const t of ["transactions", "budgets", "recurring_items", "rules", "imports", "accounts", "categories"])
+  for (const t of ["transactions", "budgets", "other_budgets", "recurring_items", "rules", "imports", "accounts", "categories"])
     db.exec(`DELETE FROM ${t}`);
   seedCategories(db);
 }

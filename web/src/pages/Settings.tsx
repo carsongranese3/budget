@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import type { Account, AccountType, CategoryWithCounts, Rule } from "../../../shared/types";
 import { api, ApiFail, useGet } from "../api";
 import { useApp } from "../app";
@@ -22,35 +21,8 @@ function Section({ title, sub, children }: { title: string; sub?: string; childr
 }
 
 export default function Settings() {
-  const app = useApp();
-  const { theme, setTheme, categories, accounts, months, reload, toast, fail, confirm } = app;
-  const navigate = useNavigate();
+  const { theme, setTheme, categories, accounts } = useApp();
   const rules = useGet<Rule[]>("/rules");
-
-  async function loadSample() {
-    if (months.has_transactions && !(await confirm({ title: "Load sample data?", body: "This replaces all your data with sample data.", confirmLabel: "Load sample data" }))) return;
-    try {
-      await api("/sample-data", "POST");
-      reload();
-      rules.reload();
-      navigate(app.to("/"));
-      toast("Sample data loaded");
-    } catch (e) {
-      fail(e);
-    }
-  }
-  async function erase() {
-    if (!(await confirm({ title: "Erase all data?", body: "This deletes every transaction, account, rule, budget and recurring item on this laptop. This can't be undone.", confirmLabel: "Erase all data" }))) return;
-    try {
-      await api("/data", "DELETE");
-      reload();
-      rules.reload();
-      navigate("/");
-      toast("All data erased");
-    } catch (e) {
-      fail(e);
-    }
-  }
 
   return (
     <>
@@ -98,13 +70,6 @@ export default function Settings() {
             {rules.data.map((r) => <RuleRow key={r.id} r={r} done={rules.reload} />)}
           </ul>
         )}
-      </Section>
-
-      <Section title="Data">
-        <div className="flex flex-wrap gap-2 p-[18px]">
-          <button type="button" className={btnSecondary} onClick={loadSample}>Load sample data</button>
-          <button type="button" className={`${btnSecondary} !text-neg`} onClick={erase}>Erase all data</button>
-        </div>
       </Section>
     </>
   );

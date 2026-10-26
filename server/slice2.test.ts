@@ -104,6 +104,35 @@ describe("budgets", () => {
     for (const k of ["income", "uncategorized", "transfer"]) expect((await put({ category_id: key(k) })).status).toBe(400);
     expect((await put({ category_id: 9999 })).status).toBe(400);
   });
+  it("Other budget: spent = unbudgeted spend, upsert/delete, validation, total", async () => {
+    const { name, add } = await setup();
+    const [din, gro] = [name("Dining"), name("Groceries")];
+    add("2026-10-02", -5000, din); add("2026-10-03", -9000, gro);
+    const put = (b: object) => app.call("PUT", "/api/budgets", { month: "2026-10", category_id: null, amount_cents: 1, ...b });
+    let r = (await app.call("GET", "/api/budgets?month=2026-10")).body;
+    expect(r.other).toEqual({ budget_cents: null, spent_cents: 14000 });
+    r = (await put({ amount_cents: 2000 })).body;
+    expect(r.other.budget_cents).toBe(2000); expect(r.total_budget_cents).toBe(2000);
+    r = (await app.call("PUT", "/api/budgets", { month: "2026-10", category_id: din, amount_cents: 100 })).body;
+    expect(r.other).toEqual({ budget_cents: 2000, spent_cents: 9000 });
+    expect(r.total_budget_cents).toBe(2100);
+    r = (await put({ amount_cents: 3000 })).body; expect(r.other.budget_cents).toBe(3000);
+    r = (await put({ amount_cents: 0 })).body; expect(r.other.budget_cents).toBeNull();
+    expect((await put({ amount_cents: -1 })).status).toBe(400);
+    expect((await put({ amount_cents: 10_000_000_001 })).status).toBe(400);
+    expect((await put({ month: "bad" })).status).toBe(400);
+    expect((await app.call("PUT", "/api/budgets", { month: "2026-10", amount_cents: 1 })).status).toBe(400);
+  });
+  it("copy includes Other and counts it", async () => {
+    const { name } = await setup();
+    const put = (m: string, c: number | null, a: number) => app.call("PUT", "/api/budgets", { month: m, category_id: c, amount_cents: a });
+    await put("2025-12", null, 700);
+    let r = (await app.call("POST", "/api/budgets/copy", { month: "2026-01" })).body;
+    expect(r.copied_count).toBe(1); expect(r.budgets.other.budget_cents).toBe(700);
+    await put("2026-01", null, 5); await put("2025-12", name("Dining"), 100);
+    r = (await app.call("POST", "/api/budgets/copy", { month: "2026-01" })).body;
+    expect(r.copied_count).toBe(2); expect(r.budgets.total_budget_cents).toBe(800);
+  });
   it("copy: previous month into target, overwrite same category, 0 when empty", async () => {
     const { name } = await setup();
     const [din, gro] = [name("Dining"), name("Groceries")];
