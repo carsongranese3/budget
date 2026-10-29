@@ -98,3 +98,14 @@
 - User categories are reorderable by drag handle (native HTML drag-and-drop, no new dependency) and ↑/↓ buttons (keyboard/touch). The order is the existing `sort_order`, so it applies everywhere (Settings, Budgets rows, all category dropdowns, spending lists).
 - Built-ins (Income, Transfer, Uncategorized) are pinned at the bottom in their current relative order and can't be moved; new categories keep being inserted above them.
 - Contract: `PUT /api/categories/order` body `{ "ids": number[] }` = every non-system category id exactly once in the new order → 200 `CategoryWithCounts[]` (same as GET /api/categories). Any missing/extra/duplicate/system id → 400.
+
+## 2026-10-28 — Transaction detail drawer: note, custom description, receipts
+- Only the Transactions page lists saved transactions (Dashboard/Budgets/Recurring show aggregates; Import rows aren't saved yet), so the detail view hooks there only. Clicking a row (not the category Select) opens a right-side `<dialog>` drawer, copying the Recurring `Panel` pattern.
+- New nullable columns on `transactions`: `note`, `custom_description`. The original bank `description` is never edited — import dedupe matches on it. The list shows `custom_description ?? description`.
+- `PATCH /api/transactions/:id` now accepts any subset of `category_id`, `note`, `custom_description` (empty string / null clears the text fields). Category changes from the drawer keep the "make this a rule?" prompt.
+- Receipts: many per transaction, stored as BLOBs in a new `receipts` table (`ON DELETE CASCADE`), so all data stays in the one git-ignored DB file — no receipts folder, nothing new to ignore, `:memory:` tests work, erase/undo-import clean up.
+- Upload is base64 in JSON (`{file_name, content_base64}`), not multipart — keeps the JSON-only CSRF guard intact. Max 10 MB decoded; PNG/JPEG/WebP/PDF only, checked by magic bytes server-side (client MIME and file name are not trusted). HEIC not supported (browsers can't render it).
+- Files served by `GET /api/receipts/:id` with the sniffed Content-Type, `X-Content-Type-Options: nosniff`, `Content-Disposition: inline` with a sanitized filename, and a restrictive CSP.
+- `Transaction` gains `receipt_count` for the 📎 row indicator.
+- **Real-DB guard (2026-10-28):** an agent run seeded sample data into the user's real `data/budget.db` (which erases first). `POST /api/sample-data` and `DELETE /api/data` now return 403 `forbidden` when the DB resolves to `data/budget.db` from the server's cwd; `:memory:` and any other `BUDGET_DB` path still work. Agent-file rules alone didn't prevent it, so it's enforced in code.
+- **Category drag preview (2026-10-28):** while dragging, the category list reorders live, with the dragged row faded as the placeholder. This replaces the insertion line. Drop saves exactly the previewed order; Escape or dropping outside reverts.

@@ -39,7 +39,12 @@ export interface Rule { id: number; merchant: string; category_id: number; creat
 export interface Transaction {
   id: number; account_id: number; date: string; description: string;
   amount_cents: number; category_id: number; import_id: number; created_at: string;
+  note: string | null; custom_description: string | null; receipt_count: number;
 }
+export interface Receipt {
+  id: number; transaction_id: number; file_name: string; mime_type: string; size_bytes: number; created_at: string;
+}
+export interface UploadReceiptRequest { file_name: string; content_base64: string }
 export interface ImportRecord {
   id: number; file_name: string; account_id: number; imported_at: string;
   row_count: number; new_count: number; skipped_count: number; unreadable_count: number;
@@ -79,7 +84,7 @@ export interface UpdateRuleRequest { merchant?: string; category_id?: number }
 // Transactions
 export interface TransactionsQuery { month: string; q?: string; account?: number; category?: number }
 export interface TransactionsResponse { transactions: Transaction[]; income_cents: number; spent_cents: number }
-export interface UpdateTransactionRequest { category_id: number }
+export interface UpdateTransactionRequest { category_id?: number; note?: string | null; custom_description?: string | null }
 export interface UncategorizedCountResponse { count: number }
 
 // Import

@@ -78,12 +78,25 @@ const MIGRATIONS = [
      month TEXT PRIMARY KEY,
      amount_cents INTEGER NOT NULL CHECK (amount_cents > 0)
    );`,
+  `ALTER TABLE transactions ADD COLUMN note TEXT;
+   ALTER TABLE transactions ADD COLUMN custom_description TEXT;
+   CREATE TABLE receipts (
+     id INTEGER PRIMARY KEY,
+     transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+     file_name TEXT NOT NULL,
+     mime_type TEXT NOT NULL,
+     size_bytes INTEGER NOT NULL,
+     data BLOB NOT NULL,
+     created_at TEXT NOT NULL
+   );
+   CREATE INDEX idx_receipts_tx ON receipts(transaction_id);`,
 ];
 
 export function openDb(file: string): DB {
   if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new Database(file);
   db.pragma("foreign_keys = ON");
+  db.pragma("secure_delete = ON"); // zero deleted receipt bytes
   if (file !== ":memory:") db.pragma("journal_mode = WAL");
   // JS uppercasing so SQL matching agrees with merchantKey/duplicate logic on non-ASCII text.
   db.function("ujs", { deterministic: true }, (s: unknown) => String(s).toUpperCase());
@@ -116,7 +129,7 @@ export function seedCategories(db: DB): void {
 
 /** Delete every row in every table, then re-seed the default categories. */
 export function eraseAll(db: DB): void {
-  for (const t of ["transactions", "budgets", "other_budgets", "recurring_items", "rules", "imports", "accounts", "categories"])
+  for (const t of ["receipts", "transactions", "budgets", "other_budgets", "recurring_items", "rules", "imports", "accounts", "categories"])
     db.exec(`DELETE FROM ${t}`);
   seedCategories(db);
 }

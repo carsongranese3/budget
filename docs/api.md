@@ -148,7 +148,14 @@ Occurrence = {                       // one expected/upcoming payment
 ```
 Sorted `date` desc, `id` desc. `q` is a case-insensitive substring of `description`; filters AND together. `income_cents`/`spent_cents` use spec G6 over the **filtered** list (TX-1); count = `transactions.length`.
 
-**PATCH `/api/transactions/:id`** — body `{ "category_id": number }` -> 200 `Transaction`. No rule side effects (rules are created only through `POST /api/rules`).
+**PATCH `/api/transactions/:id`** — body `{ "category_id"?: number, "note"?: string | null, "custom_description"?: string | null }` (at least one key, else 400) -> 200 `Transaction`. Text is trimmed; empty string or `null` clears to `null`. `note` max 2000 chars, `custom_description` max 200. No rule side effects (rules are created only through `POST /api/rules`). `Transaction` also carries `note: string | null`, `custom_description: string | null`, `receipt_count: number`.
+
+**Receipts** (stored as blobs in SQLite; cascade-deleted with their transaction, e.g. import undo and erase-all).
+`Receipt = { id, transaction_id, file_name, mime_type, size_bytes, created_at }`.
+- **GET `/api/transactions/:id/receipts`** -> 200 `Receipt[]` (oldest first); 404 if the transaction is missing.
+- **POST `/api/transactions/:id/receipts`** — body `{ "file_name": string (1-200), "content_base64": string }` -> 201 `Receipt`. 404 if the transaction is missing; 413 `payload_too_large` if the decoded file is over 10 MB; 400 `validation` if the base64 is invalid or the bytes aren't PNG/JPEG/WebP/PDF ("Receipt must be a PNG, JPEG, WebP or PDF"). Type is decided by magic bytes only; `file_name` is display-only.
+- **GET `/api/receipts/:id`** -> 200 raw bytes with the stored `Content-Type`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, `Cross-Origin-Resource-Policy: same-origin`, `Content-Disposition: inline; filename="<ascii-sanitized>"; filename*=UTF-8''<percent-encoded>`. PDFs also get `X-Frame-Options: SAMEORIGIN`. Images also get `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`; PDFs get no CSP/sandbox (only the frame option above) (not verified in a browser, but those break Chrome's PDF viewer). 404 if missing.
+- **DELETE `/api/receipts/:id`** -> 204; 404 if missing.
 
 **GET `/api/transactions/uncategorized-count?month=YYYY-MM`** -> 200 `{ "count": number }` (nav badge, SH-2).
 
@@ -226,9 +233,9 @@ Exactly one of `account_id` / `new_account` is set (400 otherwise). Overrides on
 
 ### Data management
 
-**POST `/api/sample-data`** -> 204. Replaces all data with the seeded sample set (accounts, ~6 months of transactions grouped into `imports`, rules, recurring items with past anchors, budgets). The confirmation is client-side.
+**POST `/api/sample-data`** -> 204. Replaces all data with the seeded sample set (accounts, ~6 months of transactions grouped into `imports`, rules, recurring items with past anchors, budgets). The confirmation is client-side. -> 403 `forbidden` if the DB is the real default `data/budget.db` (test-only; use `BUDGET_DB`).
 
-**DELETE `/api/data`** -> 204. Erases every row in every table and re-seeds the default categories.
+**DELETE `/api/data`** -> 204. Erases every row in every table and re-seeds the default categories. -> 403 `forbidden` if the DB is the real default `data/budget.db` (test-only; use `BUDGET_DB`).
 
 ---
 
@@ -316,6 +323,8 @@ Recurring matches also surface in `POST /api/imports` (`matched_recurring`) and 
 | 1 | PATCH, DELETE | `/api/rules/:id` |
 | 1 | GET | `/api/transactions`, `/api/transactions/uncategorized-count` |
 | 1 | PATCH | `/api/transactions/:id` |
+| 4 | GET, POST | `/api/transactions/:id/receipts` |
+| 4 | GET, DELETE | `/api/receipts/:id` |
 | 1 | GET | `/api/imports`, `/api/imports/sample-csv` |
 | 1 | POST | `/api/imports/preview`, `/api/imports` |
 | 1 | DELETE | `/api/imports/:id` |

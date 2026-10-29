@@ -1,7 +1,8 @@
+import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { computeTotals, spendByCategory } from "../shared/totals.js";
 import type {
-  ApiError, ApplyRulesResponse, BudgetsResponse, Category, SummaryResponse, CategoryWithCounts, MonthsResponse, Rule, Transaction, TransactionsResponse,
+  ApiError, ApplyRulesResponse, BudgetsResponse, Category, Receipt, SummaryResponse, CategoryWithCounts, MonthsResponse, Rule, Transaction, TransactionsResponse,
 } from "../shared/types.js";
 import {
   CATEGORY_COUNTS_SQL, SWATCHES, type DB, eraseAll, localDate, toAccount, toCategory,
@@ -239,6 +240,9 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
       .get(uncategorizedId(db), lo, hi) as { n: number };
     res.json({ count: n.n });
   });
+  // Explicit columns + receipt_count so a receipt blob is never read into a list.
+  const TX_SQL = `SELECT t.id, t.account_id, t.date, t.description, t.amount_cents, t.category_id, t.import_id, t.created_at,
+    t.note, t.custom_description, (SELECT COUNT(*) FROM receipts r WHERE r.transaction_id = t.id) AS receipt_count FROM transactions t`;
   api.get("/transactions", (req, res) => {
     const [lo, hi] = bounds(month(req.query.month));
     const where = ["date BETWEEN ? AND ?"];
@@ -249,18 +253,72 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
     }
     if (req.query.account !== undefined) { where.push("account_id = ?"); args.push(int(req.query.account, "account")); }
     if (req.query.category !== undefined) { where.push("category_id = ?"); args.push(int(req.query.category, "category")); }
-    const transactions = db.prepare(`SELECT * FROM transactions WHERE ${where.join(" AND ")} ORDER BY date DESC, id DESC`).all(...args) as Transaction[];
+    const transactions = db.prepare(`${TX_SQL} WHERE ${where.join(" AND ")} ORDER BY t.date DESC, t.id DESC`).all(...args) as Transaction[];
     const cats = (db.prepare("SELECT * FROM categories").all() as any[]).map(toCategory);
     const t = computeTotals(transactions, cats);
     const body: TransactionsResponse = { transactions, income_cents: t.income_cents, spent_cents: t.spent_cents };
     res.json(body);
   });
+  const optText = (v: unknown, field: string, max: number) => (v === null ? null : str(v, field, 0, max) || null);
   api.patch("/transactions/:id", (req, res) => {
     const id = idParam(req);
-    const category_id = mustCategory(obj(req.body).category_id);
-    const r = db.prepare("UPDATE transactions SET category_id = ? WHERE id = ?").run(category_id, id);
-    if (!r.changes) throw notFound("Transaction not found.");
-    res.json(db.prepare("SELECT * FROM transactions WHERE id = ?").get(id));
+    const b = obj(req.body);
+    if (b.category_id === undefined && b.note === undefined && b.custom_description === undefined) throw bad("Nothing to update.");
+    const category_id = b.category_id === undefined ? undefined : mustCategory(b.category_id);
+    const note = b.note === undefined ? undefined : optText(b.note, "note", 2000);
+    const custom = b.custom_description === undefined ? undefined : optText(b.custom_description, "custom_description", 200);
+    if (!db.prepare("SELECT 1 FROM transactions WHERE id = ?").get(id)) throw notFound("Transaction not found.");
+    db.transaction(() => {
+      if (category_id !== undefined) db.prepare("UPDATE transactions SET category_id = ? WHERE id = ?").run(category_id, id);
+      if (note !== undefined) db.prepare("UPDATE transactions SET note = ? WHERE id = ?").run(note, id);
+      if (custom !== undefined) db.prepare("UPDATE transactions SET custom_description = ? WHERE id = ?").run(custom, id);
+    })();
+    res.json(db.prepare(`${TX_SQL} WHERE t.id = ?`).get(id));
+  });
+
+  // ---- receipts ----
+  const RECEIPT_COLS = "id, transaction_id, file_name, mime_type, size_bytes, created_at";
+  const sniff = (b: Buffer) =>
+    b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) ? "image/png"
+    : b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff ? "image/jpeg"
+    : b.toString("latin1", 0, 4) === "RIFF" && b.toString("latin1", 8, 12) === "WEBP" ? "image/webp"
+    : b.toString("latin1", 0, 5) === "%PDF-" ? "application/pdf" : null;
+  const mustTx = (req: Request) => {
+    const id = idParam(req);
+    if (!db.prepare("SELECT 1 FROM transactions WHERE id = ?").get(id)) throw notFound("Transaction not found.");
+    return id;
+  };
+  api.get("/transactions/:id/receipts", (req, res) => {
+    res.json(db.prepare(`SELECT ${RECEIPT_COLS} FROM receipts WHERE transaction_id = ? ORDER BY id`).all(mustTx(req)));
+  });
+  api.post("/transactions/:id/receipts", (req, res) => {
+    const txId = mustTx(req);
+    const b = obj(req.body);
+    const file_name = str(b.file_name, "file_name", 1, 200);
+    const b64 = b.content_base64;
+    if (typeof b64 !== "string" || b64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) throw bad("Receipt is not valid base64.");
+    const data = Buffer.from(b64, "base64");
+    if (data.length > 10 * 1024 * 1024) throw new HttpError(413, "payload_too_large", "Receipt is too large (max 10 MB).");
+    const mime = sniff(data);
+    if (!mime) throw bad("Receipt must be a PNG, JPEG, WebP or PDF");
+    const id = Number(db.prepare("INSERT INTO receipts (transaction_id, file_name, mime_type, size_bytes, data, created_at) VALUES (?,?,?,?,?,?)")
+      .run(txId, file_name, mime, data.length, data, new Date().toISOString()).lastInsertRowid);
+    res.status(201).json(db.prepare(`SELECT ${RECEIPT_COLS} FROM receipts WHERE id = ?`).get(id) as Receipt);
+  });
+  api.get("/receipts/:id", (req, res) => {
+    const r = db.prepare("SELECT mime_type, file_name, data FROM receipts WHERE id = ?").get(idParam(req)) as { mime_type: string; file_name: string; data: Buffer } | undefined;
+    if (!r) throw notFound("Receipt not found.");
+    res.set({
+      "Content-Type": r.mime_type, "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store", "Cross-Origin-Resource-Policy": "same-origin",
+      "Content-Disposition": `inline; filename="${r.file_name.replace(/[^\x20-\x7e]|["\\%]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(r.file_name)}`,
+      // Chrome's PDF viewer breaks under a restrictive CSP/sandbox, so PDFs rely on nosniff + the viewer's own sandbox.
+      ...(r.mime_type === "application/pdf" ? { "X-Frame-Options": "SAMEORIGIN" } : { "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox" }),
+    });
+    res.send(r.data);
+  });
+  api.delete("/receipts/:id", (req, res) => {
+    if (!db.prepare("DELETE FROM receipts WHERE id = ?").run(idParam(req)).changes) throw notFound("Receipt not found.");
+    res.status(204).end();
   });
 
   // ---- summary (slice 2) ----
@@ -376,8 +434,10 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
   api.delete("/imports/:id", (req, res) => { res.json(undoImport(db, idParam(req))); });
 
   // ---- data management ----
-  api.post("/sample-data", (_req, res) => { loadSampleData(db, today()); res.status(204).end(); });
-  api.delete("/data", (_req, res) => { db.transaction(() => eraseAll(db))(); res.status(204).end(); });
+  // Agents kept wiping the real DB through these test-only endpoints.
+  const guardReal = () => { if (db.name !== ":memory:" && path.resolve(db.name) === path.resolve("data/budget.db")) throw new HttpError(403, "forbidden", "Refused: sample-data/erase only run on a throwaway DB (set BUDGET_DB)."); };
+  api.post("/sample-data", (_req, res) => { guardReal(); loadSampleData(db, today()); res.status(204).end(); });
+  api.delete("/data", (_req, res) => { guardReal(); db.transaction(() => eraseAll(db))(); db.pragma("wal_checkpoint(TRUNCATE)"); res.status(204).end(); });
 
   api.use((_req, _res) => { throw notFound("Unknown API route."); });
 
