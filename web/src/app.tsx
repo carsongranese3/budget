@@ -27,8 +27,8 @@ const AppCtx = createContext<Ctx | null>(null);
 export const useApp = () => useContext(AppCtx)!;
 
 const navItems: [string, string][] = [
-  ["/", "Dashboard"], ["/transactions", "Transactions"], ["/import", "Import"],
-  ["/budgets", "Budgets"], ["/recurring", "Recurring"], ["/settings", "Settings"],
+  ["/", "Dashboard"], ["/transactions", "Transactions"], ["/chart", "Chart"],
+  ["/budgets", "Budgets"], ["/recurring", "Recurring"], ["/import", "Import"], ["/settings", "Settings"],
 ];
 
 export function Shell() {

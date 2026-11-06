@@ -66,7 +66,9 @@ export default function Transactions() {
   const filtered = !!(urlQ || (account && accountValid) || (category && catFilterValid));
 
   const setRow = (updated: Transaction) => {
-    const rows = tx.data!.transactions.map((r) => (r.id === updated.id ? updated : r));
+    const moved = updated.date.slice(0, 7) !== month; // date edit left the shown month
+    const rows = moved ? tx.data!.transactions.filter((r) => r.id !== updated.id) : tx.data!.transactions.map((r) => (r.id === updated.id ? updated : r));
+    if (moved) toast(`Moved to ${monthLabel(updated.date.slice(0, 7))}`);
     tx.set({ transactions: rows, ...computeTotals(rows, categories) });
   };
 
@@ -326,6 +328,15 @@ function Detail({ t, onClose, onCat, onRow }: {
     }
   }
 
+  async function saveDate(date: string) {
+    if (!date || date === t.date) return;
+    try {
+      onRow(await api<Transaction>(`/transactions/${t.id}`, "PATCH", { date }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   async function upload(files: FileList | null, input: HTMLInputElement) {
     if (!files?.length) return;
     setUploading(true);
@@ -365,7 +376,11 @@ function Detail({ t, onClose, onCat, onRow }: {
         <button type="button" className={btnSecondary} onClick={onClose}>Close</button>
       </div>
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-        <dt className="text-ink-3">Date</dt><dd className="m-0">{fmtDate(t.date, true)}</dd>
+        <dt className="text-ink-3"><label htmlFor="tx-date">Date</label></dt>
+        <dd className="m-0">
+          <input id="tx-date" type="date" className={inputCls} defaultValue={t.date} onBlur={(e) => saveDate(e.target.value)} />
+          {t.original_date && <div className="mt-1 text-xs text-ink-3">Bank date: {fmtDate(t.original_date, true)}</div>}
+        </dd>
         <dt className="text-ink-3">Account</dt><dd className="m-0">{accounts.find((a) => a.id === t.account_id)?.name ?? "—"}</dd>
         <dt className="text-ink-3">Amount</dt><dd className="m-0">{money(t.amount_cents, { sign: true })}</dd>
         <dt className="text-ink-3">Bank description</dt><dd className="m-0 break-words">{t.description}</dd>

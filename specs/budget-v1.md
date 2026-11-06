@@ -10,9 +10,9 @@ Read with:
 
 ## 1. Scope
 
-In: CSV import (multi-file, per-account saved format, sign convention, duplicate skipping, undo a whole import), rule-based auto-categorization with learn-on-recategorize, Transactions, monthly category budgets, Dashboard with charts, recurring items with expected/received status (add, edit, delete), Settings (appearance, accounts, categories incl. delete, rules, sample data, erase all).
+In: CSV import (multi-file, per-account saved format, sign convention, duplicate skipping, undo a whole import), rule-based auto-categorization with learn-on-recategorize, Transactions, monthly category budgets, Dashboard with charts, recurring items with expected/received status (add, edit, delete), Settings (appearance, accounts, categories incl. delete, rules, sample data and erase all exist as API only, not in the UI: ST-8/ST-9).
 
-Out (v1): manual "add transaction" form, editing transaction amount/date/description, deleting individual transactions, splitting transactions, PDF import, bank sync, LLM categorization, multi-user/auth, export, account deletion, non-USD currencies, non-comma delimiters.
+Out (v1): manual "add transaction" form, editing transaction amount/bank description (date is editable since 2026-11-01, see docs/decisions.md), deleting individual transactions, splitting transactions, PDF import, bank sync, LLM categorization, multi-user/auth, export, account deletion, non-USD currencies, non-comma delimiters.
 
 ## 2. Global rules
 
@@ -82,8 +82,24 @@ Seed (also the state after Erase): Groceries, Dining, Rent, Utilities, Transport
 | category_id | int FK → categories | never null; Uncategorized when unknown |
 | import_id | int FK → imports, not null | every transaction belongs to an import (sample data creates its own `imports` rows) |
 | created_at | text | ISO datetime |
+| note | text \| null | free text, max 2000 chars; empty clears to null |
+| custom_description | text \| null | display override, max 200 chars; `description` itself is never edited (dedupe matches on it). The list shows `custom_description ?? description` |
+| original_date | text \| null | `YYYY-MM-DD` bank date, set the first time `date` is edited; cleared when `date` is set back to it. Dedupe (§5.9) uses `COALESCE(original_date, date)` |
 
 Indexes on `(account_id, date, amount_cents)`, `date`, `import_id`.
+
+### receipts
+| field | type | notes |
+|---|---|---|
+| id | int | |
+| transaction_id | int FK → transactions | `ON DELETE CASCADE` (import undo, erase) |
+| file_name | text | 1–200 chars |
+| mime_type | text | `image/png` \| `image/jpeg` \| `image/webp` \| `application/pdf`, decided by magic bytes |
+| size_bytes | int | ≤ 10 MB |
+| data | blob | file bytes, stored in the one DB file |
+| created_at | text | ISO datetime |
+
+Index on `transaction_id`. API responses (`Receipt`) omit `data`; bytes come from `GET /api/receipts/:id`.
 
 ### rules
 | field | type | notes |
@@ -138,9 +154,9 @@ Cascading deletes exist only for: category delete (ST-6), undo import (IM-24), E
 ## 4. Screens and flows
 
 ### 4.0 App shell — README §App shell
-Routes: `/`, `/transactions`, `/import`, `/budgets`, `/recurring`, `/settings` (docs/design.md).
+Routes: `/`, `/transactions`, `/chart`, `/budgets`, `/recurring`, `/import`, `/settings` (docs/design.md). Nav order: Dashboard · Transactions · Chart · Budgets · Recurring · Import · Settings.
 
-- SH-1 Header shows brand, the six nav items, month picker, theme toggle; the active route's nav item is highlighted.
+- SH-1 Header shows brand, the seven nav items, month picker, theme toggle; the active route's nav item is highlighted.
 - SH-2 Transactions nav shows an amber badge with the count of Uncategorized transactions in the selected month; hidden when 0.
 - SH-3 Month picker ‹ › change `?month=` and every screen re-renders for that month; arrows are disabled at the G5 range ends.
 - SH-4 "Back to <current month name>" link appears only when the selected month ≠ current month; clicking sets the current month.
@@ -178,6 +194,10 @@ Data: transactions in the selected month, sorted date desc then id desc; account
 - TX-9 Just this once: closes the prompt, no rule written.
 - TX-10 Empty states per README in this priority: no transactions in DB → "No transactions yet"; Category filter = Uncategorized only and none left → "All caught up"; any filter active → "Nothing matches"; else "No transactions in <Month YYYY>".
 - TX-11 Table scrolls horizontally inside its card under its min-width.
+- TX-12 **Notes.** A transaction has an optional free-text `note` (max 2000 chars) edited in the transaction detail drawer; empty clears it. Saved via `PATCH /api/transactions/:id`; no rule prompt or other side effect.
+- TX-13 **Custom description.** Optional `custom_description` (max 200 chars) is shown in place of the bank `description` in the list; the bank description is never changed, so import duplicate detection (§5.9) is unaffected. Empty clears it. Search (TX-2) still filters on `description`.
+- TX-14 **Editable date.** `date` can be changed to any real calendar date. The first change stores the bank date in `original_date`; setting it back clears `original_date`. Month filters, totals, budgets and recurring matching use the edited `date`; re-import duplicate detection uses `COALESCE(original_date, date)`, so a moved transaction is not re-added. When a date edit moves the transaction out of the shown month, the row leaves the list and a toast "Moved to <Month YYYY>" appears.
+- TX-15 **Receipts.** Any number of receipts per transaction: upload PNG, JPEG, WebP or PDF (type by magic bytes, ≤ 10 MB each), view inline, delete. Rows with receipts show a paperclip indicator (`receipt_count`). Receipts are deleted with their transaction (import undo, erase all).
 
 **merchantKey** (unit-tested): the suggested rule text. Uppercase; drop a leading processor prefix (`SQ *`, `TST*`, `PL*`, `PYL*`, `PY *`, `PAYPAL *`, `UBR*`); drop a trailing `*REF` code; cut `WEB ID:` / `PPD ID:` / `TRANSACTION#:` trailers; cut at the first reference-like token (any token with a digit, e.g. date, phone, store number, `F38545`) other than the first token, except the number after `ENDING IN`; after such a cut also drop a trailing city + 2-letter state (a city the bank truncated from the prior word is kept; with no cut, city/state stays, e.g. `SQ *JOE'S AUSTIN TX` → `JOE'S AUSTIN TX`); drop a doubled trailing city word (`… AUSTIN AUSTIN`); trim trailing spaces/hyphens. Never rewrites inner text, so the result is always a substring of the uppercased description. If the result would be < 3 chars it falls back to the form before the reference-token cut. E.g. `Trader Joe's #552 San Francisco` → `TRADER JOE'S`; `AMZN Mktp US*MK1A2` → `AMZN MKTP US`; `CHIPOTLE 0092 AUSTIN TX 08/20` → `CHIPOTLE`. `&amp;` is not decoded.
 
@@ -241,6 +261,14 @@ Eligible categories: `excluded_from_totals = 0` and `system_key` not `income`/`u
 - RC-6 Explainer strip with sample dashed row per README. Empty list → "No recurring items yet" + "Add recurring".
 - RC-7 Panel closes on scrim click or Esc without saving.
 - RC-8 Occurrences before `anchor_date` are never expected or overdue. Example (today = Oct 25): a monthly item added with Next date Nov 3 shows nothing expected in October, no expected sub-line on the October Dashboard, status "Nothing due yet", Next date "Nov 3". To track a payment that already happened (e.g. Oct 3), the user enters that earlier date as Next date.
+
+### 4.5b Chart (`/chart`)
+- CH-1 Line graph for the selected month: x = days 1..month end, y = money with $0 vertically centered on a symmetric scale (floor ±$1000 at the outer gridline, ±$500 at the inner). Hand-rolled SVG, theme colors only.
+- CH-2 The line is the running cumulative net: starts at $0, each G6-counted transaction moves it by its signed `amount_cents` (in = up, out = down). Transfers (`excluded_from_totals`) and positive Uncategorized rows don't move it. The last point equals the month's net.
+- CH-3 In the current month the line stops at today (`months.today`). Future-dated rows still count in the header totals, so the header net can differ from the visible endpoint.
+- CH-4 Every day with any transactions has a focusable node (button, `aria-pressed`, `aria-label` with the count and running net); hovering or focusing it updates an `aria-live` readout.
+- CH-5 Clicking a node lists that day's transactions in a card below the chart (description, category, amount; uncounted rows muted and labelled "not counted"), with the day's net change, an "Open in Transactions" link (month only, no day filter) and Close. Clicking the node again or Close deselects. Changing the month clears the selection.
+- CH-6 No transactions in the month → empty state with an Import link.
 
 ### 4.6 Settings (`/settings`) — README §6
 - ST-1 Appearance segmented control = theme toggle (SH-5).

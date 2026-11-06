@@ -27,7 +27,7 @@ Every non-2xx response has this body:
 | 400 | `validation` | bad/missing body field, bad query param, rule merchant < 3 chars, amount 0 on a recurring item, etc. |
 | 400 | `invalid_file` | CSV rejected (spec IM-2 / edge 14). `message` is the user-facing copy: "This doesn't look like a CSV export.", "This file is too large (max 10 MB).", "This file has no transactions in it." |
 | 400 | `nothing_to_import` | commit would insert 0 rows (all duplicates). Nothing is written. |
-| 403 | `forbidden` | `Origin` header present and not localhost/127.0.0.1/[::1] (CSRF guard); a `Host` header that isn't localhost/127.0.0.1/[::1] on any request (DNS-rebinding guard); deleting/renaming/excluding a locked or system category |
+| 403 | `forbidden` | `Origin` header present and not localhost/127.0.0.1/[::1] (CSRF guard); a `Host` header that isn't localhost/127.0.0.1/[::1] on any request (DNS-rebinding guard); deleting/renaming/excluding a locked or system category; `POST /api/sample-data` and `DELETE /api/data` when the DB is the real `data/budget.db` (real-DB guard; `:memory:` and other `BUDGET_DB` paths work) |
 | 404 | `not_found` | unknown id, or unknown `/api/*` route |
 | 409 | `conflict` | duplicate name (account, category), duplicate rule merchant on PATCH |
 | 413 | `payload_too_large` | body > 15 MB |
@@ -73,6 +73,8 @@ Rule = { id: number; merchant: string; category_id: number; created_at: string }
 Transaction = {
   id: number; account_id: number; date: string; description: string;
   amount_cents: number; category_id: number; import_id: number; created_at: string;
+  note: string | null; custom_description: string | null; receipt_count: number;
+  original_date: string | null;     // bank date, only when `date` was edited
 }
 
 ImportRecord = {
@@ -148,7 +150,7 @@ Occurrence = {                       // one expected/upcoming payment
 ```
 Sorted `date` desc, `id` desc. `q` is a case-insensitive substring of `description`; filters AND together. `income_cents`/`spent_cents` use spec G6 over the **filtered** list (TX-1); count = `transactions.length`.
 
-**PATCH `/api/transactions/:id`** — body `{ "category_id"?: number, "note"?: string | null, "custom_description"?: string | null }` (at least one key, else 400) -> 200 `Transaction`. Text is trimmed; empty string or `null` clears to `null`. `note` max 2000 chars, `custom_description` max 200. No rule side effects (rules are created only through `POST /api/rules`). `Transaction` also carries `note: string | null`, `custom_description: string | null`, `receipt_count: number`.
+**PATCH `/api/transactions/:id`** — body `{ "category_id"?: number, "note"?: string | null, "custom_description"?: string | null, "date"?: string }` (at least one key, else 400) -> 200 `Transaction`. Text is trimmed; empty string or `null` clears to `null`. `note` max 2000 chars, `custom_description` max 200. No rule side effects (rules are created only through `POST /api/rules`). `date` must be a real calendar date `YYYY-MM-DD` (else 400 `validation`). The first date change stores the bank date in `original_date`; setting `date` back to `original_date` clears it to `null`. Re-import duplicate detection compares against `COALESCE(original_date, date)`.
 
 **Receipts** (stored as blobs in SQLite; cascade-deleted with their transaction, e.g. import undo and erase-all).
 `Receipt = { id, transaction_id, file_name, mime_type, size_bytes, created_at }`.

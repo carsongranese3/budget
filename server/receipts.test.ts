@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { startApp } from "../test/helpers.js";
+import { detectFormat, parseCsvText } from "../shared/csv.js";
+import { splitDuplicates } from "./imports.js";
 
 let app: Awaited<ReturnType<typeof startApp>>;
 afterEach(() => app?.close());
@@ -79,5 +81,54 @@ describe("receipts", () => {
     await up(1, "r.png", PNG);
     expect((await app.call("DELETE", "/api/data")).status).toBe(204);
     expect(app.db.prepare("SELECT COUNT(*) n FROM receipts").get()).toEqual({ n: 0 });
+  });
+});
+
+describe("editable transaction date", () => {
+  it("tracks original_date, validates, and keeps re-import dedupe", async () => {
+    await seed();
+    let r = await app.call("PATCH", "/api/transactions/1", { date: "2026-10-05" });
+    expect(r.body).toMatchObject({ date: "2026-10-05", original_date: "2026-10-01" });
+    r = await app.call("PATCH", "/api/transactions/1", { date: "2026-10-09" });
+    expect(r.body).toMatchObject({ date: "2026-10-09", original_date: "2026-10-01" });
+    const row = { date: "2026-10-01", amount_cents: -500, description: "COFFEE" } as any;
+    expect(splitDuplicates(app.db, 1, [row])).toMatchObject({ fresh: [], dupes: [row] });
+    r = await app.call("PATCH", "/api/transactions/1", { date: "2026-10-01" });
+    expect(r.body).toMatchObject({ date: "2026-10-01", original_date: null });
+    for (const date of ["2026-02-30", "abc", 5]) expect((await app.call("PATCH", "/api/transactions/1", { date })).status).toBe(400);
+  });
+});
+
+describe("editable date + real import commit", () => {
+  const csvOf = (rows: string[]) => "Date,Description,Amount\n" + rows.join("\n") + "\n";
+  const body = (content: string, account_id: number | null) => ({
+    file_name: "a.csv", content, account_id, new_account: account_id ? null : { name: "A", type: "checking" },
+    format: detectFormat(parseCsvText(content)), save_format: true, category_overrides: [],
+  });
+  it("re-import after moving a date (same month, other month) does not duplicate", async () => {
+    app = await startApp();
+    const csv = csvOf(["10/15/2026,Coffee Shop,-5.00", "10/20/2026,Rent,-100.00"]);
+    const c = await app.call("POST", "/api/imports", body(csv, null));
+    const acct = c.body.account.id;
+    const id = (await app.call("GET", "/api/transactions?month=2026-10")).body.transactions.find((t: any) => t.description === "Coffee Shop").id;
+    for (const d of ["2026-10-17", "2026-11-03"]) {
+      await app.call("PATCH", `/api/transactions/${id}`, { date: d });
+      const r = await app.call("POST", "/api/imports", body(csv, acct));
+      expect(r.status).toBe(400);
+      expect(r.body.error.code).toBe("nothing_to_import");
+    }
+    expect(app.db.prepare("SELECT COUNT(*) n FROM transactions").get()).toEqual({ n: 2 });
+  });
+  it("moved transaction outside the new CSV's range: not duplicated, other rows still import", async () => {
+    app = await startApp();
+    const c = await app.call("POST", "/api/imports", body(csvOf(["10/15/2026,Coffee Shop,-5.00"]), null));
+    const acct = c.body.account.id;
+    await app.call("PATCH", "/api/transactions/1", { date: "2026-12-25" });
+    // CSV covers only Oct 15..16; the moved row's current date (Dec 25) is outside it
+    const csv2 = csvOf(["10/15/2026,Coffee Shop,-5.00", "10/16/2026,Bagel,-3.00"]);
+    const r = await app.call("POST", "/api/imports", body(csv2, acct));
+    expect(r.status).toBe(201);
+    expect(r.body.import).toMatchObject({ new_count: 1, skipped_count: 1 });
+    expect(app.db.prepare("SELECT COUNT(*) n FROM transactions").get()).toEqual({ n: 2 });
   });
 });

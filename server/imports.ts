@@ -56,7 +56,7 @@ export function splitDuplicates(db: DB, accountId: number | null, rows: ParsedRo
   if (accountId !== null && rows.length) {
     const dates = rows.map((r) => r.date).sort();
     const q = db.prepare(
-      "SELECT date, amount_cents, description FROM transactions WHERE account_id = ? AND date BETWEEN ? AND ?",
+      "SELECT COALESCE(original_date, date) AS date, amount_cents, description FROM transactions WHERE account_id = ? AND COALESCE(original_date, date) BETWEEN ? AND ?",
     ).all(accountId, dates[0], dates[dates.length - 1]) as { date: string; amount_cents: number; description: string }[];
     for (const t of q) {
       const k = dupKey(t.date, t.amount_cents, t.description.replace(/\s+/g, " ").trim());

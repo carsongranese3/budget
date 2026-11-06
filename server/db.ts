@@ -90,6 +90,7 @@ const MIGRATIONS = [
      created_at TEXT NOT NULL
    );
    CREATE INDEX idx_receipts_tx ON receipts(transaction_id);`,
+  `ALTER TABLE transactions ADD COLUMN original_date TEXT;`,
 ];
 
 export function openDb(file: string): DB {

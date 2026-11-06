@@ -1,5 +1,6 @@
 import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
+import { isValidDate } from "../shared/recurring.js";
 import { computeTotals, spendByCategory } from "../shared/totals.js";
 import type {
   ApiError, ApplyRulesResponse, BudgetsResponse, Category, Receipt, SummaryResponse, CategoryWithCounts, MonthsResponse, Rule, Transaction, TransactionsResponse,
@@ -242,7 +243,7 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
   });
   // Explicit columns + receipt_count so a receipt blob is never read into a list.
   const TX_SQL = `SELECT t.id, t.account_id, t.date, t.description, t.amount_cents, t.category_id, t.import_id, t.created_at,
-    t.note, t.custom_description, (SELECT COUNT(*) FROM receipts r WHERE r.transaction_id = t.id) AS receipt_count FROM transactions t`;
+    t.note, t.custom_description, t.original_date, (SELECT COUNT(*) FROM receipts r WHERE r.transaction_id = t.id) AS receipt_count FROM transactions t`;
   api.get("/transactions", (req, res) => {
     const [lo, hi] = bounds(month(req.query.month));
     const where = ["date BETWEEN ? AND ?"];
@@ -263,12 +264,14 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
   api.patch("/transactions/:id", (req, res) => {
     const id = idParam(req);
     const b = obj(req.body);
-    if (b.category_id === undefined && b.note === undefined && b.custom_description === undefined) throw bad("Nothing to update.");
+    if (b.category_id === undefined && b.note === undefined && b.custom_description === undefined && b.date === undefined) throw bad("Nothing to update.");
     const category_id = b.category_id === undefined ? undefined : mustCategory(b.category_id);
     const note = b.note === undefined ? undefined : optText(b.note, "note", 2000);
     const custom = b.custom_description === undefined ? undefined : optText(b.custom_description, "custom_description", 200);
+    if (b.date !== undefined && !isValidDate(b.date)) throw bad("date must be a real date (YYYY-MM-DD).");
     if (!db.prepare("SELECT 1 FROM transactions WHERE id = ?").get(id)) throw notFound("Transaction not found.");
     db.transaction(() => {
+      if (b.date !== undefined) db.prepare("UPDATE transactions SET original_date = CASE WHEN COALESCE(original_date, date) = ? THEN NULL ELSE COALESCE(original_date, date) END, date = ? WHERE id = ?").run(b.date, b.date, id);
       if (category_id !== undefined) db.prepare("UPDATE transactions SET category_id = ? WHERE id = ?").run(category_id, id);
       if (note !== undefined) db.prepare("UPDATE transactions SET note = ? WHERE id = ?").run(note, id);
       if (custom !== undefined) db.prepare("UPDATE transactions SET custom_description = ? WHERE id = ?").run(custom, id);

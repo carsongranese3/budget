@@ -40,6 +40,7 @@ export interface Transaction {
   id: number; account_id: number; date: string; description: string;
   amount_cents: number; category_id: number; import_id: number; created_at: string;
   note: string | null; custom_description: string | null; receipt_count: number;
+  original_date: string | null;
 }
 export interface Receipt {
   id: number; transaction_id: number; file_name: string; mime_type: string; size_bytes: number; created_at: string;

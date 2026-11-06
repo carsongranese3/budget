@@ -24,7 +24,7 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
 
 ## Conventions
 - One repo, one `package.json`: `server/` (Express API + SQLite), `web/` (React app, Vite root), `shared/` (API types in
-  `shared/types.ts` plus pure logic both sides use: `csv.ts` parser, `merchant.ts`, `totals.ts`). Tests sit next to the
+  `shared/types.ts` plus pure logic both sides use: `csv.ts` parser, `merchant.ts`, `totals.ts` incl. `dailyRunningNet`/`isCounted` for the Chart page). Tests sit next to the
   code as `*.test.ts`; CSV fixtures in `test/fixtures/`, API test helper in `test/helpers.ts` (`:memory:` DB).
 - Every non-GET API request is `Content-Type: application/json` (send `{}` when body-less) — the server rejects
   anything else (CSRF guard). The server binds 127.0.0.1 only.
@@ -53,6 +53,8 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
   API tests bind a loopback port; in the Claude Code sandbox that needs `sandbox.network.allowLocalBinding: true`.
 - Typecheck: `npm run typecheck`
 - Build: `npm run build` (vite build + typecheck)
+- Test run (isolated): `npm run dev:isolated` (API 127.0.0.1:5184 + web http://localhost:5183, throwaway DB at
+  `$TMPDIR/budget-qa.db` or `BUDGET_DB`). Agents use this, never `npm run dev`. Needs local binding (see above).
 - `npm start` runs the API only (no static hosting of `dist/`); use `npm run dev` to use the app.
 
 ---
