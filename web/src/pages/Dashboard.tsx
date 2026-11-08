@@ -75,7 +75,7 @@ function SeriesChart({ series, selected, onOpen, canSelect }: {
                 type="button"
                 aria-current={on ? "date" : undefined}
                 aria-disabled={!ok || undefined}
-                aria-label={`${monthLabel(s.month)}: income ${money(s.income_cents)}, spending ${money(clamp(s.spent_cents))} — view transactions`}
+                aria-label={`${monthLabel(s.month)}: income ${money(s.income_cents)}, spending ${money(clamp(s.spent_cents))} — ${on ? "view transactions" : "select month"}`}
                 onMouseEnter={() => setHover(s.month)}
                 onFocus={() => setHover(s.month)}
                 onBlur={() => setHover(null)}
@@ -98,7 +98,9 @@ function SeriesChart({ series, selected, onOpen, canSelect }: {
 
 function BudgetProgress({ b, month }: { b: BudgetsResponse; month: string }) {
   const { categories, to } = useApp();
-  const rows = b.items.filter((i) => i.budget_cents != null);
+  const rows = b.items.filter((i) => i.budget_cents != null)
+    .map((i) => ({ key: String(i.category_id), name: categories.find((c) => c.id === i.category_id)?.name ?? "Category", spent: i.spent_cents, bud: i.budget_cents! }));
+  if (b.other.budget_cents != null) rows.push({ key: "other", name: "Other", spent: b.other.spent_cents, bud: b.other.budget_cents });
   return (
     <>
       <div className="flex items-baseline justify-between">
@@ -111,26 +113,24 @@ function BudgetProgress({ b, month }: { b: BudgetsResponse; month: string }) {
             No budgets for {monthName(month)}. <Link to={to("/budgets")} className={`${btnLink} text-[13px] no-underline`}>Set budgets</Link>
           </div>
         )}
-        {rows.map((i) => {
-          const bud = i.budget_cents!;
-          const name = categories.find((c) => c.id === i.category_id)?.name ?? "Category";
-          const over = i.spent_cents > bud, near = !over && i.spent_cents * 100 >= bud * 85;
+        {rows.map(({ key, name, spent, bud }) => {
+          const over = spent > bud, near = !over && spent * 100 >= bud * 85;
           const bar = over ? "bg-neg" : near ? "bg-warn" : "bg-accent";
           return (
-            <div key={i.category_id} className="flex flex-col gap-[6px]">
+            <div key={key} className="flex flex-col gap-[6px]">
               <div className="flex justify-between gap-3 text-[13.5px]">
                 <span>{name}</span>
                 <span>
-                  <span className={`font-medium ${over ? "text-neg" : ""}`}>{money(i.spent_cents)}</span>
+                  <span className={`font-medium ${over ? "text-neg" : ""}`}>{money(spent)}</span>
                   <span className="text-ink-3"> / {money(bud)}</span>
                 </span>
               </div>
-              <div role="progressbar" aria-label={`${name} budget used`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round((i.spent_cents / bud) * 100))} className="h-[6px] overflow-hidden rounded-[3px] bg-track">
-                <div className={`h-full rounded-[3px] ${bar}`} style={{ width: `${Math.min(100, (i.spent_cents / bud) * 100)}%` }} />
+              <div role="progressbar" aria-label={`${name} budget used`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round((spent / bud) * 100))} className="h-[6px] overflow-hidden rounded-[3px] bg-track">
+                <div className={`h-full rounded-[3px] ${bar}`} style={{ width: `${Math.min(100, (spent / bud) * 100)}%` }} />
               </div>
               {(over || near) && (
                 <div className={`text-xs ${over ? "text-neg" : "text-warn-ink"}`}>
-                  {over ? `Over by ${money(i.spent_cents - bud)}` : `${money(bud - i.spent_cents)} left`}
+                  {over ? `Over by ${money(spent - bud)}` : `${money(bud - spent)} left`}
                 </div>
               )}
             </div>
@@ -209,7 +209,8 @@ function Loaded({ month, months, categories, to }: Pick<ReturnType<typeof useApp
   const bud = useGet<BudgetsResponse>(`/budgets?month=${month}`);
   const uncat = categories.find((c) => c.system_key === "uncategorized");
 
-  const openMonth = (m: string) => nav(m === months.current_month ? "/transactions" : `/transactions?month=${m}`);
+  // first click selects the month on the Dashboard; clicking the already-selected month opens Transactions
+  const openMonth = (m: string) => nav(`${m === month ? "/transactions" : "/"}${m === months.current_month ? "" : `?month=${m}`}`);
   const canSelect = (m: string) => m >= months.earliest_month && m <= months.latest_month;
 
   const head = (

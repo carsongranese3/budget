@@ -29,6 +29,7 @@ export interface Account {
 export interface Category {
   id: number; name: string; color: string;
   excluded_from_totals: boolean;
+  fixed: boolean;
   system_key: SystemKey | null;
   sort_order: number;
 }
@@ -73,7 +74,7 @@ export interface UpdateAccountRequest { name?: string; type?: AccountType; csv_f
 // Categories
 export interface CreateCategoryRequest { name: string }
 export interface ReorderCategoriesRequest { ids: number[] }
-export interface UpdateCategoryRequest { name?: string; color?: string; excluded_from_totals?: boolean }
+export interface UpdateCategoryRequest { name?: string; color?: string; excluded_from_totals?: boolean; fixed?: boolean }
 
 // Rules
 export interface RuleImpactResponse { uncategorized_count: number }
@@ -144,6 +145,8 @@ export interface BudgetsResponse {
   /** Unbudgeted spend bucket: spent = items with no budget; budget_cents null when unset. */
   other: { budget_cents: number | null; spent_cents: number };
   total_budget_cents: number; spent_cents: number;
+  /** Eligible `fixed` categories only: their non-null budgets / their spending (budgeted or not). Included in the totals above. */
+  fixed_budget_cents: number; fixed_spent_cents: number;
 }
 /** category_id null = the Other budget. */
 export interface SetBudgetRequest { month: string; category_id: number | null; amount_cents: number }

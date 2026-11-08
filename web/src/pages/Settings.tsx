@@ -339,6 +339,12 @@ function CategoryRow({ c, rules, loading, reloadRules, order }: { c: CategoryWit
           <Toggle label={`Exclude ${c.name} from totals`} on={c.excluded_from_totals} onChange={(v) => patch({ excluded_from_totals: v })} />
         </label>
       )}
+      {!locked && (
+        <label className="flex items-center gap-2 text-[13.5px] text-ink-2" title="Bills like rent; kept out of % used">
+          Fixed
+          <Toggle label={`Mark ${c.name} as fixed`} on={c.fixed} onChange={(v) => patch({ fixed: v })} />
+        </label>
+      )}
       {c.system_key === null && (
         <button type="button" className={`${btnLink} !text-neg`} onClick={del}>Delete</button>
       )}

@@ -38,6 +38,16 @@ describe("GET /api/summary", () => {
       { category_id: key("uncategorized"), spent_cents: 700 },
     ]);
   });
+  it("by_category leaves out fixed categories; totals still count them", async () => {
+    const { name, add } = await setup();
+    const [din, gro] = [name("Dining"), name("Groceries")];
+    app.db.prepare("UPDATE categories SET fixed = 1 WHERE id = ?").run(gro);
+    add("2026-10-02", -20000, gro);
+    add("2026-10-03", -5000, din);
+    const r = (await app.call("GET", "/api/summary?month=2026-10")).body;
+    expect(r.spent_cents).toBe(25000);
+    expect(r.by_category).toEqual([{ category_id: din, spent_cents: 5000 }]);
+  });
   it("series spans the year boundary", async () => {
     const { key, add } = await setup();
     add("2025-09-15", -100, key("uncategorized"));
@@ -77,6 +87,24 @@ describe("GET /api/summary", () => {
 });
 
 describe("budgets", () => {
+  it("fixed categories: split sums, skipped by Other; PATCH validation", async () => {
+    const { key, name, add } = await setup();
+    const din = name("Dining"), gro = name("Groceries");
+    add("2026-10-02", -5000, din); add("2026-10-03", -9000, gro);
+    const patch = (id: number, b: object) => app.call("PATCH", `/api/categories/${id}`, b);
+    expect((await patch(din, { fixed: "yes" })).status).toBe(400);
+    expect((await patch(key("income"), { fixed: true })).status).toBe(403);
+    expect((await patch(key("uncategorized"), { fixed: true })).status).toBe(403);
+    const ok = await patch(din, { fixed: true });
+    expect([ok.status, ok.body.fixed]).toEqual([200, true]);
+    await app.call("PUT", "/api/budgets", { month: "2026-10", category_id: gro, amount_cents: 20000 });
+    let r = (await app.call("GET", "/api/budgets?month=2026-10")).body;
+    expect(r.other.spent_cents).toBe(0);
+    expect([r.fixed_budget_cents, r.fixed_spent_cents, r.spent_cents, r.total_budget_cents]).toEqual([0, 5000, 14000, 20000]);
+    await app.call("PUT", "/api/budgets", { month: "2026-10", category_id: din, amount_cents: 6000 });
+    r = (await app.call("GET", "/api/budgets?month=2026-10")).body;
+    expect([r.fixed_budget_cents, r.fixed_spent_cents, r.total_budget_cents]).toEqual([6000, 5000, 26000]);
+  });
   it("lists eligible categories only; set, overwrite, delete, validate", async () => {
     const { key, name, add } = await setup();
     const din = name("Dining");

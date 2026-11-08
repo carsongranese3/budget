@@ -122,3 +122,16 @@
 - Known limit: in the current month, future-dated rows still count in the header totals while the line stops at today, so the visible endpoint can differ from the header net. Accepted (QA low finding).
 - "Open in Transactions" carries the month only. The Transactions page has no day filter, and adding one would need an API change.
 - **Isolated test run (2026-11-05):** `npm run dev:isolated` runs the API on 127.0.0.1:5184 and Vite on :5183 against a throwaway DB (`$TMPDIR/budget-qa.db`). The Vite proxy target now reads `PORT` (default 5174). This way agents never point a dev server at `data/budget.db`. This run's browser check was blocked: the sandbox denies local binding, and the unsandboxed retry was refused, so the Chart has only code-level QA (typecheck + 117 shared/web tests).
+
+## 2026-11-05 — Fixed categories (rent etc. out of "% used")
+- Budgets summary label: "Spent so far" only for the current month, "Spent" for past/future months.
+- New per-category boolean `fixed` (DB `categories.fixed` INTEGER 0/1 default 0; JSON real boolean). Toggled in Settings next to the excluded toggle. `PATCH /api/categories/:id` accepts `fixed`; 403 `forbidden` on Income/Uncategorized, same rule as `excluded_from_totals`.
+- `BudgetsResponse` adds `fixed_budget_cents` (sum of non-null budgets of eligible fixed categories) and `fixed_spent_cents` (spending in eligible fixed categories). Existing `total_budget_cents` / `spent_cents` stay all-inclusive (backward compatible); the page derives flexible = total − fixed.
+- Fixed categories' unbudgeted spending does NOT go into `other.spent_cents`. Rent without a budget shouldn't eat the Other budget.
+- Budgets summary: a "Fixed" line (e.g. "Fixed: $1,800 of $1,850", or just the spend when no fixed budget), and Total budget / Spent / Remaining / % used / bar computed on flexible only. Per-category rows unchanged. Dashboard, totals, charts unaffected.
+- `fixed` and `excluded_from_totals` may both be set; excluded categories aren't budget-eligible, so `fixed` then has no effect.
+
+## 2026-11-05 — Dashboard "Spending by category" hides fixed categories
+- `GET /api/summary` `by_category` now leaves out categories marked `fixed` (the Settings toggle). That card shows discretionary spending only. Fixed spending still counts in `spent_cents`, the Spent tile and the chart series, so the bars no longer add up to Spent.
+- **Budget progress shows Other (2026-11-05):** the Dashboard Budget progress card adds an "Other" row after the category rows whenever the month has an Other budget. It uses the same `other.spent_cents` as the Budgets page. Budgeted categories already showed at $0 spent. Frontend only.
+- **Dashboard chart click (2026-11-05):** clicking a month bar now selects that month on the Dashboard. Clicking the selected month again opens Transactions for it. This replaces the one-click jump to Transactions. Frontend only (`openMonth` in `Dashboard.tsx`).

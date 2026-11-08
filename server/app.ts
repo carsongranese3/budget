@@ -132,11 +132,16 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
       if (locked && b.excluded_from_totals !== !!cur.excluded_from_totals)
         throw new HttpError(403, "forbidden", `${cur.name} can't be excluded from totals.`);
     }
+    if (b.fixed !== undefined) {
+      if (typeof b.fixed !== "boolean") throw bad("Fixed must be true or false.");
+      if (locked && b.fixed !== !!cur.fixed) throw new HttpError(403, "forbidden", `${cur.name} can't be marked fixed.`);
+    }
     try {
       db.transaction(() => {
         if (name !== undefined) db.prepare("UPDATE categories SET name = ? WHERE id = ?").run(name, id);
         if (b.color !== undefined) db.prepare("UPDATE categories SET color = ? WHERE id = ?").run(b.color, id);
         if (b.excluded_from_totals !== undefined) db.prepare("UPDATE categories SET excluded_from_totals = ? WHERE id = ?").run(b.excluded_from_totals ? 1 : 0, id);
+        if (b.fixed !== undefined) db.prepare("UPDATE categories SET fixed = ? WHERE id = ?").run(b.fixed ? 1 : 0, id);
       })();
     } catch (e) {
       if (isConstraint(e)) throw new HttpError(409, "conflict", `A category named ${name} already exists.`);
@@ -348,7 +353,7 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
     const t = computeTotals(cur, cats);
     const unc = uncategorizedId(db);
     const by_category = [...spendByCategory(cur, cats)]
-      .filter(([, v]) => v > 0).map(([category_id, spent_cents]) => ({ category_id, spent_cents }))
+      .filter(([id, v]) => v > 0 && !cats.find((c) => c.id === id)?.fixed).map(([category_id, spent_cents]) => ({ category_id, spent_cents }))
       .sort((a, b) => b.spent_cents - a.spent_cents || a.category_id - b.category_id);
     const body: SummaryResponse = {
       month: m, income_cents: t.income_cents, spent_cents: t.spent_cents, net_cents: t.net_cents,
@@ -371,14 +376,18 @@ export function createApp(db: DB, today: () => string = () => localDate()) {
       .map(({ id }) => cats.find((c) => c.id === id)!)
       .filter((c) => !c.excluded_from_totals && c.system_key !== "income" && c.system_key !== "uncategorized")
       .map((c) => ({ category_id: c.id, budget_cents: set.get(c.id) ?? null, spent_cents: Math.max(0, spend.get(c.id) ?? 0) }));
+    const fixedIds = new Set(cats.filter((c) => c.fixed).map((c) => c.id));
+    const fixedItems = items.filter((i) => fixedIds.has(i.category_id));
     const other = {
       budget_cents: ((db.prepare("SELECT amount_cents FROM other_budgets WHERE month = ?").get(m) as any)?.amount_cents ?? null) as number | null,
-      spent_cents: items.reduce((s, i) => s + (i.budget_cents == null ? i.spent_cents : 0), 0),
+      spent_cents: items.reduce((s, i) => s + (i.budget_cents == null && !fixedIds.has(i.category_id) ? i.spent_cents : 0), 0),
     };
     return {
       month: m, items, other,
       total_budget_cents: items.reduce((s, i) => s + (i.budget_cents ?? 0), 0) + (other.budget_cents ?? 0),
       spent_cents: items.reduce((s, i) => s + i.spent_cents, 0),
+      fixed_budget_cents: fixedItems.reduce((s, i) => s + (i.budget_cents ?? 0), 0),
+      fixed_spent_cents: fixedItems.reduce((s, i) => s + i.spent_cents, 0),
     };
   };
   api.get("/budgets", (req, res) => { res.json(budgetsFor(month(req.query.month))); });

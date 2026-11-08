@@ -59,6 +59,7 @@ Account = {
 Category = {
   id: number; name: string; color: string;       // one of the 11 swatch oklch strings
   excluded_from_totals: boolean;
+  fixed: boolean;                      // rent etc.; Budgets page reports it separately from flexible spending
   system_key: "income" | "transfer" | "uncategorized" | null;
   sort_order: number;
 }
@@ -122,7 +123,7 @@ Occurrence = {                       // one expected/upcoming payment
 
 **POST `/api/categories`** — body `{ "name": string }` -> 201 `CategoryWithCounts`. Server trims, enforces 1–40 chars and case-insensitive uniqueness (409), picks the next swatch color in rotation, inserts before Income.
 
-**PATCH `/api/categories/:id`** — body (all optional): `{ "name"?: string, "color"?: string, "excluded_from_totals"?: boolean }` -> 200 `CategoryWithCounts`. 403 `forbidden` when renaming Income/Uncategorized, or setting `excluded_from_totals` on Income/Uncategorized. 409 on duplicate name. 400 if `color` isn't one of the 11 swatches.
+**PATCH `/api/categories/:id`** — body (all optional): `{ "name"?: string, "color"?: string, "excluded_from_totals"?: boolean, "fixed"?: boolean }` -> 200 `CategoryWithCounts`. 400 if `fixed` isn't a boolean. 403 `forbidden` when renaming Income/Uncategorized, or changing `excluded_from_totals` or `fixed` on Income/Uncategorized. 409 on duplicate name. 400 if `color` isn't one of the 11 swatches.
 
 **PUT `/api/categories/order`** — body `{ "ids": number[] }` (`ReorderCategoriesRequest`) = every non-system category id exactly once, in the new order -> 200 `CategoryWithCounts[]` (same as GET). One transaction: `sort_order` 0..n-1 for `ids`, then the built-ins (Income, Transfer, Uncategorized) after them in their existing relative order. 400 `validation` for non-array/non-integer ids, missing, extra, duplicate, unknown, or built-in ids. Create still inserts above the built-ins.
 
@@ -261,7 +262,7 @@ Exactly one of `account_id` / `new_account` is set (400 otherwise). Overrides on
   "series": [{ "month": "2026-05", "income_cents": 480000, "spent_cents": 300000 }]
 }
 ```
-All totals per spec G6. `income_count` = Income-category transactions in the month ("N deposits"); `spent_count` = counted non-Income transactions ("N transactions"); `uncategorized_count` = Uncategorized in the month (DB-4). `by_category`: counted non-Income categories (Uncategorized included) with spending > 0, largest first (DB-7). `series`: 7 entries ascending, ending at `series_end` (default `month`). `series_end` must be a valid month with `month` inside the window (`month` ≤ `series_end` ≤ `month`+6), else 400 `validation` (`spent_cents` may be negative; the chart clamps at 0). `expected_*_cents` are the §6.4 values and are never added to the totals. The dashboard's empty state uses `has_transactions` from `/api/months`.
+All totals per spec G6. `income_count` = Income-category transactions in the month ("N deposits"); `spent_count` = counted non-Income transactions ("N transactions"); `uncategorized_count` = Uncategorized in the month (DB-4). `by_category`: counted non-Income, non-`fixed` categories (Uncategorized included) with spending > 0, largest first (DB-7). `series`: 7 entries ascending, ending at `series_end` (default `month`). `series_end` must be a valid month with `month` inside the window (`month` ≤ `series_end` ≤ `month`+6), else 400 `validation` (`spent_cents` may be negative; the chart clamps at 0). `expected_*_cents` are the §6.4 values and are never added to the totals. The dashboard's empty state uses `has_transactions` from `/api/months`.
 
 ### Budgets
 
@@ -272,10 +273,12 @@ All totals per spec G6. `income_count` = Income-category transactions in the mon
   "items": [{ "category_id": 4, "budget_cents": 45000, "spent_cents": 31240 }],
   "other": { "budget_cents": 20000, "spent_cents": 8000 },
   "total_budget_cents": 65000,
-  "spent_cents": 31240
+  "spent_cents": 31240,
+  "fixed_budget_cents": 45000,
+  "fixed_spent_cents": 31240
 }
 ```
-`other` = the "Other" budget for unbudgeted spending: `other.spent_cents` = sum of `items[].spent_cents` where `budget_cents` is `null` (shrinks when a category gets its own budget); `other.budget_cents` is `null` when unset. `budget_cents` is `null` when no budget is set. `items[].spent_cents` is clamped at ≥ 0. `total_budget_cents` = sum of the month's budgets over eligible categories plus `other.budget_cents`; top-level `spent_cents` = spending across all eligible categories (BU-3). Items are in category `sort_order`. The Dashboard's budget progress uses the items with non-null `budget_cents`.
+`other` = the "Other" budget for unbudgeted spending: `other.spent_cents` = sum of `items[].spent_cents` where `budget_cents` is `null` and the category isn't `fixed` (shrinks when a category gets its own budget); `other.budget_cents` is `null` when unset. `budget_cents` is `null` when no budget is set. `items[].spent_cents` is clamped at ≥ 0. `total_budget_cents` = sum of the month's budgets over eligible categories plus `other.budget_cents`; top-level `spent_cents` = spending across all eligible categories (BU-3). `fixed_budget_cents` = sum of non-null budgets of eligible `fixed` categories; `fixed_spent_cents` = sum of `items[].spent_cents` of eligible `fixed` categories (budgeted or not). Both are already included in `total_budget_cents` / `spent_cents` (which stay all-inclusive); the page derives flexible = total − fixed. Items are in category `sort_order`. The Dashboard's budget progress uses the items with non-null `budget_cents` (shown even at $0 spent), then an "Other" row when `other.budget_cents` is non-null.
 
 **GET `/api/budgets?month=YYYY-MM`** -> 200 `BudgetsResponse`.
 

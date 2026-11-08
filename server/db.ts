@@ -91,6 +91,7 @@ const MIGRATIONS = [
    );
    CREATE INDEX idx_receipts_tx ON receipts(transaction_id);`,
   `ALTER TABLE transactions ADD COLUMN original_date TEXT;`,
+  `ALTER TABLE categories ADD COLUMN fixed INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export function openDb(file: string): DB {
@@ -140,7 +141,7 @@ export function toAccount(r: any): Account {
   return { ...r, csv_format: r.csv_format ? JSON.parse(r.csv_format) : null };
 }
 export function toCategory(r: any): Category {
-  return { ...r, excluded_from_totals: !!r.excluded_from_totals };
+  return { ...r, excluded_from_totals: !!r.excluded_from_totals, fixed: !!r.fixed };
 }
 export const CATEGORY_COUNTS_SQL = `
   SELECT c.*,
