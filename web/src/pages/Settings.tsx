@@ -54,6 +54,14 @@ export default function Settings() {
         )}
       </Section>
 
+      <Section title="Backup" sub="A snapshot is also saved automatically before each import and undo (newest 10 kept in data/backups/).">
+        <div className="flex items-center justify-between gap-3 px-[18px] py-4">
+          <span>Download a copy of your whole database.</span>
+          {/* plain link: the response is a file, not JSON */}
+          <a href="/api/backup" download className={`${btnSecondary} no-underline`}>Download backup</a>
+        </div>
+      </Section>
+
       <Section title="Categories" action={<ReapplyRules disabled={!rules.data?.length} />} sub="Open a category to see its rules. Rules assign a category to imported transactions whose description contains the text.">
         {rules.error && !rules.data && <div className="p-4"><LoadErr msg={rules.error} retry={rules.reload} /></div>}
         <CategoryList rules={rules.data ?? []} loading={!rules.data && !rules.error} reloadRules={rules.reload} />

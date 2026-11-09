@@ -34,6 +34,10 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
 - Financial data never leaves the machine: no telemetry, no third-party calls, the DB file and any sample
   statements stay out of git.
 - Field names are defined in specs and endpoint docs — match them exactly, do not invent.
+- Split transactions: a split parent (`is_split = 1`) is hidden everywhere via the `VISIBLE` SQL predicate in
+  `server/db.ts`; only import dedupe/counts and recurring matching read parents (`parent_id IS NULL`). Any new
+  query over `transactions` must pick one of the two.
+- Keyboard shortcuts go through `shortcutBlocked(e)` in `web/src/lib.ts` (skips inputs, open dialogs/menus, modifiers).
 
 ## Where things live
 - Specs: `specs/`
@@ -41,7 +45,9 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
 - Normalized data shapes: `docs/data-shapes.md` — not used: the app has no external data sources; the data model is
   in `specs/budget-v1.md` and `shared/types.ts`
 - Pure shared logic: `shared/` (`csv.ts`, `merchant.ts`, `totals.ts`, `recurring.ts`); server routes in `server/app.ts`
-  (+ `imports.ts`, `recurring.ts`), schema/migrations in `server/db.ts`; pages in `web/src/pages/`
+  (+ `imports.ts`, `recurring.ts`, `backup.ts`, `http.ts` validators, `sample.ts`), schema/migrations in `server/db.ts`;
+  pages in `web/src/pages/` (incl. `Trends.tsx`)
+- DB snapshots: `backups/` next to the DB file (`data/backups/`, git-ignored), newest 10, taken before import commit/undo
 - Decisions log: `docs/decisions.md`
 - Design reference, if a prototype was provided: `design/` (pulled files) + `docs/design.md` (mapping)
 

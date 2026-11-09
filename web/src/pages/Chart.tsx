@@ -121,7 +121,7 @@ function Loaded({ month, hasAny }: { month: string; hasAny: boolean }) {
               <span className={dayNet > 0 ? "text-pos" : ""}>{money(dayNet, { sign: true })}</span>
             </div>
             <div className="flex gap-3">
-              <Link to={to("/transactions")} className={`${btnLink} no-underline`}>Open in Transactions</Link>
+              <Link to={to("/transactions", { day: `${month}-${String(sel).padStart(2, "0")}` })} className={`${btnLink} no-underline`}>Open in Transactions</Link>
               <button type="button" className={btnLink} onClick={() => setSel(null)}>Close</button>
             </div>
           </div>

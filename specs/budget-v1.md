@@ -155,9 +155,9 @@ Cascading deletes exist only for: category delete (ST-6), undo import (IM-24), E
 ## 4. Screens and flows
 
 ### 4.0 App shell — README §App shell
-Routes: `/`, `/transactions`, `/chart`, `/budgets`, `/recurring`, `/import`, `/settings` (docs/design.md). Nav order: Dashboard · Transactions · Chart · Budgets · Recurring · Import · Settings.
+Routes: `/`, `/transactions`, `/chart`, `/trends`, `/budgets`, `/recurring`, `/import`, `/settings` (docs/design.md). Nav order: Dashboard · Transactions · Chart · Trends · Budgets · Recurring · Import · Settings.
 
-- SH-1 Header shows brand, the seven nav items, month picker, theme toggle; the active route's nav item is highlighted.
+- SH-1 Header shows brand, the eight nav items, month picker, theme toggle; the active route's nav item is highlighted.
 - SH-2 Transactions nav shows an amber badge with the count of Uncategorized transactions in the selected month; hidden when 0.
 - SH-3 Month picker ‹ › change `?month=` and every screen re-renders for that month; arrows are disabled at the G5 range ends.
 - SH-4 "Back to <current month name>" link appears only when the selected month ≠ current month; clicking sets the current month.
@@ -165,6 +165,7 @@ Routes: `/`, `/transactions`, `/chart`, `/budgets`, `/recurring`, `/import`, `/s
 - SH-6 Under 1100px viewport the nav moves to a second, horizontally scrollable row.
 - SH-7 Navigation between screens keeps the `?month=` param.
 - SH-8 Any API failure shows a toast "Something went wrong — <short reason>" and leaves on-screen data unchanged (no partial optimistic state left behind).
+- SH-9 **Shortcuts.** `←`/`→` change the month (within the G5 range) on every page; `/` focuses Transactions search. All shortcut keys are ignored with a modifier key, while typing in an input/textarea/select/contenteditable, or while a dialog or `[role=menu]` is open (`shortcutBlocked` in `web/src/lib.ts`).
 
 ### 4.1 Dashboard (`/`) — README §1
 Data: totals for the selected month, 7-month income/spend series, spending by category, budget progress, expected + upcoming recurring.
@@ -199,6 +200,11 @@ Data: transactions in the selected month, sorted date desc then id desc; account
 - TX-13 **Custom description.** Optional `custom_description` (max 200 chars) is shown in place of the bank `description` in the list; the bank description is never changed, so import duplicate detection (§5.9) is unaffected. Empty clears it. Search (TX-2) still filters on `description`.
 - TX-14 **Editable date.** `date` can be changed to any real calendar date. The first change stores the bank date in `original_date`; setting it back clears `original_date`. Month filters, totals, budgets and recurring matching use the edited `date`; re-import duplicate detection uses `COALESCE(original_date, date)`, so a moved transaction is not re-added. When a date edit moves the transaction out of the shown month, the row leaves the list and a toast "Moved to <Month YYYY>" appears.
 - TX-15 **Receipts.** Any number of receipts per transaction: upload PNG, JPEG, WebP or PDF (type by magic bytes, ≤ 10 MB each), view inline, delete. Rows with receipts show a paperclip indicator (`receipt_count`). Receipts are deleted with their transaction (import undo, erase all).
+- TX-16 **Bulk categorize.** Row checkboxes plus a select-all header checkbox; with ≥ 1 selected a bulk bar ("N selected", category Select, Clear) sets them all via `PATCH /api/transactions` (atomic). One rule prompt follows only when every changed row has the same `merchantKey`. Selection clears on any filter/month change.
+- TX-17 **Keyboard triage.** `j`/`k` move a focused row, `x` toggles select, `1`–`9` set the Nth category (row Select order) on the selection or else the focused row, `Enter` opens the drawer. A hint line lists the keys.
+- TX-18 **All time + custom description search.** An "All time" toggle (`all=1`) drops the month filter; subtitle and empty states say "all time". `q` matches `description` OR `custom_description` (supersedes TX-13's search note).
+- TX-19 **Day filter.** `?day=YYYY-MM-DD` filters to one day, shown as a removable chip and cleared by Clear filters. The Chart's "Open in Transactions" passes it (supersedes CH-5's "month only").
+- TX-20 **Split transactions.** In the drawer, Split divides a row into 2–100 parts (own category, amount, optional note) that are non-zero, share the row's sign and sum exactly to it; Save is enabled only at $0 remaining. The original becomes a hidden parent (`is_split`), excluded from every list, total, budget, chart, badge, rule sweep and category count; parts copy its account, date, description and import. Import dedupe, import counts and recurring matching use the parent only. Parts show a "split" badge; a part's drawer shows the group with Edit split / Unsplit (confirm). A date edit on a part moves the whole group. Receipts move to the first part on split and back on unsplit. Undo import removes parts.
 
 **merchantKey** (unit-tested): the suggested rule text. Uppercase; drop a leading processor prefix (`SQ *`, `TST*`, `PL*`, `PYL*`, `PY *`, `PAYPAL *`, `UBR*`); drop a trailing `*REF` code; cut `WEB ID:` / `PPD ID:` / `TRANSACTION#:` trailers; cut at the first reference-like token (any token with a digit, e.g. date, phone, store number, `F38545`) other than the first token, except the number after `ENDING IN`; after such a cut also drop a trailing city + 2-letter state (a city the bank truncated from the prior word is kept; with no cut, city/state stays, e.g. `SQ *JOE'S AUSTIN TX` → `JOE'S AUSTIN TX`); drop a doubled trailing city word (`… AUSTIN AUSTIN`); trim trailing spaces/hyphens. Never rewrites inner text, so the result is always a substring of the uppercased description. If the result would be < 3 chars it falls back to the form before the reference-token cut. E.g. `Trader Joe's #552 San Francisco` → `TRADER JOE'S`; `AMZN Mktp US*MK1A2` → `AMZN MKTP US`; `CHIPOTLE 0092 AUSTIN TX 08/20` → `CHIPOTLE`. `&amp;` is not decoded.
 
@@ -262,6 +268,7 @@ Eligible categories: `excluded_from_totals = 0` and `system_key` not `income`/`u
 - RC-6 Explainer strip with sample dashed row per README. Empty list → "No recurring items yet" + "Add recurring".
 - RC-7 Panel closes on scrim click or Esc without saving.
 - RC-8 Occurrences before `anchor_date` are never expected or overdue. Example (today = Oct 25): a monthly item added with Next date Nov 3 shows nothing expected in October, no expected sub-line on the October Dashboard, status "Nothing due yet", Next date "Nov 3". To track a payment that already happened (e.g. Oct 3), the user enters that earlier date as Next date.
+- RC-9 **Suggested.** A Suggested card lists recurring candidates detected from history (`GET /api/recurring/suggestions`: same merchant key and sign, amounts within 10% of the median, ≥ 3 hits on a biweekly/monthly/yearly gap band, not already tracked by `match_text`). Track opens the add panel prefilled; Dismiss hides it in this browser (localStorage). Hidden when empty.
 
 ### 4.5b Chart (`/chart`)
 - CH-1 Line graph for the selected month: x = days 1..month end, y = money with $0 vertically centered on a symmetric scale (floor ±$1000 at the outer gridline, ±$500 at the inner). Hand-rolled SVG, theme colors only.
@@ -270,6 +277,10 @@ Eligible categories: `excluded_from_totals = 0` and `system_key` not `income`/`u
 - CH-4 Every day with any transactions has a focusable node (button, `aria-pressed`, `aria-label` with the count and running net); hovering or focusing it updates an `aria-live` readout.
 - CH-5 Clicking a node lists that day's transactions in a card below the chart (description, category, amount; uncounted rows muted and labelled "not counted"), with the day's net change, an "Open in Transactions" link (month only, no day filter) and Close. Clicking the node again or Close deselects. Changing the month clears the selection.
 - CH-6 No transactions in the month → empty state with an Import link.
+
+### 4.5c Trends (`/trends`)
+- TR-1 `GET /api/trends?end=<selected month>`: 12 monthly bars for "All spending" or one picked category (hand-rolled, theme colors, selected month highlighted, hover/focus caption).
+- TR-2 Year-to-date card (Jan 1 of the selected month's year through that month): income, spent, and per-category bars largest first. Fixed categories are included. Empty state when there's no data.
 
 ### 4.6 Settings (`/settings`) — README §6
 - ST-1 Appearance segmented control = theme toggle (SH-5).
@@ -280,6 +291,7 @@ Eligible categories: `excluded_from_totals = 0` and `system_key` not `income`/`u
 - ST-6 **Delete category.** Only user categories (`system_key` null) show a red "Delete" text link; Income, Transfer and Uncategorized never do. Confirmation (G8): "Delete X? Its N transactions and M recurring items become Uncategorized, and its R rules and its budgets are removed." On confirm, in one SQLite transaction: transactions and recurring items with that category → Uncategorized; its rules and all its budget rows (every month) deleted; category deleted. Toast "Deleted X".
 - ST-7 Rules live under their category: each category row has a "N rules" / "No rules" disclosure button that expands its rules (sorted by merchant; several can be open). Each rule: mono merchant chip → category dot + name, Edit inline (merchant input uppercased on save, ≥ 3 chars, unique; category dropdown; Save / Cancel; toast "Rule saved"). Delete removes it immediately with toast "Rule deleted". Editing or deleting a rule never changes existing transactions; it only affects future imports and future "Create rule" sweeps.
 - ST-7a "Reapply rules" button in the Categories section header (hint "Fills in Uncategorized transactions only."; disabled with no rules): runs every rule over all Uncategorized transactions with import precedence; categorized rows and rules pointing at Uncategorized change nothing. Toast "Rules applied · N transactions categorized" or "No uncategorized transactions matched a rule"; nav badge refreshes.
+- ST-10 **Backup.** "Download backup" downloads a consistent copy of the DB (`GET /api/backup`). Separately, the server snapshots the DB into `backups/` next to the DB file before every import commit that writes rows and every import undo, keeping the newest 10. Restore = replace the DB file by hand while the server is stopped.
 - ST-8 (removed from the UI; API kept) Load sample data: confirmation (G8, "This replaces all your data with sample data.") when the DB has any transactions; then replaces all data with the seeded sample set (accounts, ~6 months of transactions ending today grouped into `imports` rows, rules, recurring items with anchors in the past, budgets), navigates to Dashboard, toast "Sample data loaded".
 - ST-9 (removed from the UI; API kept) Erase all data: confirmation (G8, "Erase all data? This deletes every transaction, account, rule, budget and recurring item on this laptop. This can't be undone.") then deletes all rows in all tables and re-seeds the default categories; navigates to Dashboard showing the first-run state (DB-9), toast "All data erased". Theme is kept.
 

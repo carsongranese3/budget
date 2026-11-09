@@ -67,8 +67,9 @@ export function localDate(iso: string): string {
 }
 
 /** Query string for GET /transactions; empty or invalid filters are omitted (treated as All). */
-export function txQuery(month: string, q: string, account: string, category: string, validCategoryIds: number[]): string {
-  const u = new URLSearchParams({ month });
+export function txQuery(month: string, q: string, account: string, category: string, validCategoryIds: number[], all = false, day = ""): string {
+  const u = new URLSearchParams(all ? { all: "1" } : { month });
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day)) u.set("day", day);
   if (q) u.set("q", q);
   if (/^\d+$/.test(account)) u.set("account", account);
   if (/^\d+$/.test(category) && validCategoryIds.includes(Number(category))) u.set("category", category);
@@ -100,4 +101,12 @@ export function axisLabel(cents: number): string {
 /** y-axis step in cents (DB-5): max($500, ceil(max/4/$500) x $500). */
 export function axisStep(maxCents: number): number {
   return Math.max(50000, Math.ceil(maxCents / 4 / 50000) * 50000);
+}
+
+/** True when a global shortcut key should be ignored: modifiers, typing in a field, an open dialog or menu. */
+export function shortcutBlocked(e: KeyboardEvent): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return true;
+  const t = e.target as HTMLElement | null;
+  if (t?.closest?.("input:not([type=checkbox]), textarea, select, [contenteditable]:not([contenteditable=false])")) return true;
+  return !!document.querySelector("dialog[open], [role=menu]");
 }

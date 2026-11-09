@@ -1,5 +1,6 @@
 // Spec §6: recurring occurrences, received matching, status, expected, upcoming. Pure; "today" is always a parameter.
-import type { Occurrence, RecurringItem, RecurringStatus } from "./types.js";
+import { merchantKey } from "./merchant.js";
+import type { Frequency, Occurrence, RecurringItem, RecurringStatus, RecurringSuggestion } from "./types.js";
 
 export type RecItem = Pick<RecurringItem, "frequency" | "anchor_date" | "match_text" | "amount_cents">;
 export type RecTx = { date: string; description: string; amount_cents: number };
@@ -105,4 +106,46 @@ export function newlyReceived(items: Full[], before: RecTx[], fresh: RecTx[]): {
 export function isValidDate(s: unknown): s is string {
   return typeof s === "string" && /^(19|20)\d{2}-\d{2}-\d{2}$/.test(s)
     && +s.slice(5, 7) >= 1 && +s.slice(5, 7) <= 12 && +s.slice(8) >= 1 && +s.slice(8) <= dim(+s.slice(0, 4), +s.slice(5, 7));
+}
+
+export type SuggestTx = { date: string; description: string; amount_cents: number; category_id: number; account_id: number };
+// Allowed day-gap band per frequency; a series needs >= 75% of its gaps (and the median) inside one band.
+const BANDS: [Frequency, number, number][] = [["biweekly", 13, 15], ["monthly", 27, 34], ["yearly", 350, 380]];
+const median = (a: number[]) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor((s.length - 1) / 2)]; };
+const mostCommon = (a: number[]) => { const c = new Map<number, number>(); a.forEach((x) => c.set(x, (c.get(x) ?? 0) + 1)); return [...c].sort((x, y) => y[1] - x[1] || y[0] - x[0])[0][0]; };
+
+/**
+ * Detect repeating charges/deposits: same merchantKey and sign, amounts within 10% of the median, >= 3 hits at a
+ * roughly biweekly/monthly/yearly cadence. Skips merchants whose key equals an existing recurring match_text.
+ * shortcut: one series per merchant+sign (a merchant with two different cadences gets one), upgrade if that bites.
+ */
+export function detectRecurring(txs: SuggestTx[], existingMatchTexts: string[]): RecurringSuggestion[] {
+  const skip = new Set(existingMatchTexts.map((t) => t.toUpperCase()));
+  const groups = new Map<string, SuggestTx[]>();
+  for (const t of txs) {
+    const key = merchantKey(t.description);
+    if (!key || skip.has(key) || t.amount_cents === 0) continue;
+    const g = `${Math.sign(t.amount_cents)}|${key}`;
+    groups.set(g, [...(groups.get(g) ?? []), t]);
+  }
+  const out: RecurringSuggestion[] = [];
+  for (const [g, all] of groups) {
+    const amt = median(all.map((t) => t.amount_cents));
+    const hits = all.filter((t) => Math.abs(t.amount_cents - amt) <= Math.abs(amt) * 0.1).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    if (hits.length < 3) continue;
+    const gaps = hits.slice(1).map((t, i) => dn(t.date) - dn(hits[i].date));
+    const mg = median(gaps);
+    const band = BANDS.find(([, lo, hi]) => mg >= lo && mg <= hi && gaps.filter((x) => x >= lo && x <= hi).length >= gaps.length * 0.75);
+    if (!band) continue;
+    const merchant = g.slice(g.indexOf("|") + 1);
+    const last = hits[hits.length - 1].date;
+    const next = occurrences({ frequency: band[0], anchor_date: last, match_text: merchant, amount_cents: amt }, addDays(last, 1), addDays(last, 400))[0];
+    out.push({
+      merchant, name: merchant.toLowerCase().replace(/(^|[^a-z0-9])([a-z])/g, (_, p, c) => p + c.toUpperCase()),
+      amount_cents: amt, frequency: band[0],
+      category_id: mostCommon(hits.map((t) => t.category_id)), account_id: mostCommon(hits.map((t) => t.account_id)),
+      last_date: last, next_date: next, occurrences: hits.length,
+    });
+  }
+  return out.sort((a, b) => b.occurrences - a.occurrences || (a.merchant < b.merchant ? -1 : a.merchant > b.merchant ? 1 : 0));
 }

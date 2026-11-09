@@ -92,7 +92,13 @@ const MIGRATIONS = [
    CREATE INDEX idx_receipts_tx ON receipts(transaction_id);`,
   `ALTER TABLE transactions ADD COLUMN original_date TEXT;`,
   `ALTER TABLE categories ADD COLUMN fixed INTEGER NOT NULL DEFAULT 0;`,
+  `ALTER TABLE transactions ADD COLUMN parent_id INTEGER REFERENCES transactions(id) ON DELETE CASCADE;
+   ALTER TABLE transactions ADD COLUMN is_split INTEGER NOT NULL DEFAULT 0;
+   CREATE INDEX idx_tx_parent ON transactions(parent_id);`,
 ];
+
+/** SQL predicate hiding split parents (their parts carry the amounts). Use in every list/total/count. */
+export const VISIBLE = "is_split = 0";
 
 export function openDb(file: string): DB {
   if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -145,7 +151,7 @@ export function toCategory(r: any): Category {
 }
 export const CATEGORY_COUNTS_SQL = `
   SELECT c.*,
-    (SELECT COUNT(*) FROM transactions WHERE category_id = c.id) AS transaction_count,
+    (SELECT COUNT(*) FROM transactions WHERE category_id = c.id AND ${VISIBLE}) AS transaction_count,
     (SELECT COUNT(*) FROM recurring_items WHERE category_id = c.id) AS recurring_count,
     (SELECT COUNT(*) FROM rules WHERE category_id = c.id) AS rule_count
   FROM categories c`;

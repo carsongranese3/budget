@@ -7,6 +7,7 @@ import type {
 import { type DB, recomputeLastImport, toAccount, uncategorizedId } from "./db.js";
 import { addDays, newlyReceived } from "../shared/recurring.js";
 import { recurringItems, txsBetween } from "./recurring.js";
+import { snapshot } from "./backup.js";
 import { HttpError, bad, int, notFound, obj, oneOf, str } from "./http.js";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -56,7 +57,7 @@ export function splitDuplicates(db: DB, accountId: number | null, rows: ParsedRo
   if (accountId !== null && rows.length) {
     const dates = rows.map((r) => r.date).sort();
     const q = db.prepare(
-      "SELECT COALESCE(original_date, date) AS date, amount_cents, description FROM transactions WHERE account_id = ? AND COALESCE(original_date, date) BETWEEN ? AND ?",
+      "SELECT COALESCE(original_date, date) AS date, amount_cents, description FROM transactions WHERE parent_id IS NULL AND account_id = ? AND COALESCE(original_date, date) BETWEEN ? AND ?",
     ).all(accountId, dates[0], dates[dates.length - 1]) as { date: string; amount_cents: number; description: string }[];
     for (const t of q) {
       const k = dupKey(t.date, t.amount_cents, t.description.replace(/\s+/g, " ").trim());
@@ -172,6 +173,12 @@ export function commit(db: DB, body: unknown): CommitImportResponse {
   const catIds = new Set((db.prepare("SELECT id FROM categories").all() as { id: number }[]).map((c) => c.id));
   for (const c of overrides.values()) if (!catIds.has(c)) throw bad("Unknown category in category_overrides.");
 
+  // Same checks the write transaction repeats; done first so failed/no-op imports take no snapshot.
+  if (newAcct) {
+    if (db.prepare("SELECT 1 FROM accounts WHERE name = ?").get(newAcct.name)) throw new HttpError(409, "conflict", "An account with that name already exists.");
+  } else if (!db.prepare("SELECT 1 FROM accounts WHERE id = ?").get(accountId)) throw bad("Unknown account_id.");
+  if (splitDuplicates(db, newAcct ? null : accountId, rows).fresh.length === 0) throw new HttpError(400, "nothing_to_import", "Nothing to import — every row is already imported.");
+  snapshot(db); // before any write; VACUUM INTO can't run inside the transaction below
   return db.transaction((): CommitImportResponse => {
     let acctId: number;
     const now = new Date().toISOString();
@@ -223,17 +230,20 @@ export function commit(db: DB, body: unknown): CommitImportResponse {
 export function listImports(db: DB): ImportListItem[] {
   return db.prepare(
     `SELECT i.*, a.name AS account_name,
-       (SELECT COUNT(*) FROM transactions WHERE import_id = i.id) AS transaction_count
+       (SELECT COUNT(*) FROM transactions WHERE import_id = i.id AND parent_id IS NULL) AS transaction_count
      FROM imports i JOIN accounts a ON a.id = i.account_id
      ORDER BY i.imported_at DESC, i.id DESC`,
   ).all() as ImportListItem[];
 }
 
 export function undoImport(db: DB, id: number): UndoImportResponse {
+  if (!db.prepare("SELECT 1 FROM imports WHERE id = ?").get(id)) throw notFound("Import not found.");
+  snapshot(db);
   return db.transaction(() => {
     const imp = db.prepare("SELECT account_id FROM imports WHERE id = ?").get(id) as { account_id: number } | undefined;
     if (!imp) throw notFound("Import not found.");
-    const removed = db.prepare("DELETE FROM transactions WHERE import_id = ?").run(id).changes;
+    const removed = (db.prepare("SELECT COUNT(*) n FROM transactions WHERE import_id = ? AND parent_id IS NULL").get(id) as { n: number }).n;
+    db.prepare("DELETE FROM transactions WHERE import_id = ?").run(id); // parts share import_id, so they go too
     db.prepare("DELETE FROM imports WHERE id = ?").run(id);
     recomputeLastImport(db, imp.account_id);
     return { removed_count: removed };

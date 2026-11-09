@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { NavLink, Link, Outlet, useSearchParams } from "react-router-dom";
 import type { Account, CategoryWithCounts, MonthsResponse, UncategorizedCountResponse } from "../../shared/types";
 import { useGet } from "./api";
-import { addMonth, applyTheme, initialTheme, monthLabel, monthName, type Theme } from "./lib";
+import { addMonth, applyTheme, initialTheme, monthLabel, monthName, shortcutBlocked, type Theme } from "./lib";
 import { btnSecondary, Chevron, ConfirmDialog, LoadErr, Loading, Toast, type ConfirmOpts } from "./ui";
 
 interface Ctx {
@@ -27,7 +27,7 @@ const AppCtx = createContext<Ctx | null>(null);
 export const useApp = () => useContext(AppCtx)!;
 
 const navItems: [string, string][] = [
-  ["/", "Dashboard"], ["/transactions", "Transactions"], ["/chart", "Chart"],
+  ["/", "Dashboard"], ["/transactions", "Transactions"], ["/chart", "Chart"], ["/trends", "Trends"],
   ["/budgets", "Budgets"], ["/recurring", "Recurring"], ["/import", "Import"], ["/settings", "Settings"],
 ];
 
@@ -79,6 +79,22 @@ export function Shell() {
     else n.set("month", m);
     setParams(n);
   };
+
+  // Left/Right arrows step the month, within the available range.
+  const setMonthRef = useRef(setMonth);
+  setMonthRef.current = setMonth;
+  useEffect(() => {
+    if (!months) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || shortcutBlocked(e)) return;
+      const next = addMonth(month, e.key === "ArrowLeft" ? -1 : 1);
+      if (next < months.earliest_month || next > months.latest_month) return;
+      e.preventDefault();
+      setMonthRef.current(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [month, months]);
 
   const to = useCallback(
     (path: string, extra: Record<string, string> = {}) => {

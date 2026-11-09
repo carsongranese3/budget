@@ -7,6 +7,11 @@ describe("txQuery", () => {
     expect(txQuery("2026-10", "", "abc", "9999", [1, 2])).toBe("/transactions?month=2026-10");
     expect(txQuery("2026-10", "", "1x", "x", [1, 2])).toBe("/transactions?month=2026-10");
   });
+  it("all-time drops month; day only when well-formed", () => {
+    expect(txQuery("2026-10", "x", "", "", [], true)).toBe("/transactions?all=1&q=x");
+    expect(txQuery("2026-10", "", "", "", [], false, "2026-10-14")).toBe("/transactions?month=2026-10&day=2026-10-14");
+    expect(txQuery("2026-10", "", "", "", [], false, "bad")).toBe("/transactions?month=2026-10");
+  });
   it("includes valid filters", () => expect(txQuery("2026-10", "uber", "3", "2", [1, 2])).toBe("/transactions?month=2026-10&q=uber&account=3&category=2"));
 });
 

@@ -11,6 +11,7 @@ import { Recurring } from "./pages/Recurring";
 import Import from "./pages/Import";
 import Transactions from "./pages/Transactions";
 import Settings from "./pages/Settings";
+import Trends from "./pages/Trends";
 
 applyTheme(initialTheme()); // before first paint, avoids a flash
 
@@ -22,6 +23,7 @@ createRoot(document.getElementById("root")!).render(
           <Route index element={<Dashboard />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="chart" element={<Chart />} />
+          <Route path="trends" element={<Trends />} />
           <Route path="import" element={<Import />} />
           <Route path="budgets" element={<Budgets />} />
           <Route path="recurring" element={<Recurring />} />
