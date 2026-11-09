@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { addMonth, axisLabel, axisStep, centsToInput, cleanDollars, dollarsToCents, seriesEnd, txQuery } from "./lib";
+import { addMonth, axisLabel, axisStep, centsToInput, cleanDollars, dollarsToCents, seriesEnd, stackShares, txQuery } from "./lib";
+
+describe("stackShares", () => {
+  const cats = [{ category_id: 1, spent_cents: [300, 0] }, { category_id: 2, spent_cents: [100, -50] }, { category_id: 3, spent_cents: [0, 0] }];
+  it("splits a month by share, keeping order and dropping zeros", () =>
+    expect(stackShares(cats, 0)).toEqual([{ category_id: 1, pct: 75 }, { category_id: 2, pct: 25 }]));
+  it("ignores negative (refund) months and returns [] when nothing is positive", () => expect(stackShares(cats, 1)).toEqual([]));
+});
 
 describe("txQuery", () => {
   it("sends only month with no filters", () => expect(txQuery("2026-10", "", "", "", [1, 2])).toBe("/transactions?month=2026-10"));

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { TrendsResponse } from "../../../shared/types";
 import { useGet } from "../api";
 import { useApp } from "../app";
-import { axisLabel, axisStep, monthLabel, monthName, money } from "../lib";
+import { axisLabel, axisStep, colorBarsPref, monthLabel, monthName, money, stackShares } from "../lib";
 import { btnPrimary, Card, Dot, EmptyState, LoadErr, Loading, PageHead, Select } from "../ui";
 
 const cardTitle = "text-[14.5px] font-semibold";
@@ -34,6 +34,7 @@ export default function Trends() {
   const pickedCat = picked ? catById.get(picked.category_id) : undefined;
   const label = pickedCat?.name ?? "All spending";
   const color = pickedCat?.color ?? "var(--spend)";
+  const stack = !picked && colorBarsPref(); // only "All spending" is stacked; one category is already one color
   const step = axisStep(Math.max(0, ...values));
   const top = step * 4;
   const shown = hover ?? month;
@@ -75,7 +76,9 @@ export default function Trends() {
                   className="flex h-full min-w-0 flex-1 cursor-default flex-col items-center gap-2 rounded border-0 bg-transparent p-0"
                 >
                   <div className={`flex min-h-0 w-full flex-1 items-end justify-center ${on || hover === m ? "opacity-100" : "opacity-45"}`}>
-                    <div className="w-[clamp(8px,60%,28px)] rounded-t-[3px]" style={{ height: `${(values[i] / top) * 100}%`, background: color }} />
+                    <div className="flex w-[clamp(8px,60%,28px)] flex-col-reverse overflow-hidden rounded-t-[3px]" style={{ height: `${(values[i] / top) * 100}%`, background: color }}>
+                      {stack && stackShares(d.categories, i).map((s) => <div key={s.category_id} className="shrink-0" style={{ height: `${s.pct}%`, background: catById.get(s.category_id)?.color ?? "var(--spend)" }} />)}
+                    </div>
                   </div>
                   <div className={`text-xs ${on ? "font-semibold text-ink" : "text-ink-3"}`}>{monthName(m).slice(0, 3)}</div>
                 </button>

@@ -44,6 +44,29 @@ export function initialTheme(): Theme {
   }
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
+// Per-browser preference: stack the spending bars (Dashboard + Trends) in category colors.
+export function colorBarsPref(): boolean {
+  try {
+    return localStorage.getItem("budget.colorBars") === "1";
+  } catch {
+    return false;
+  }
+}
+export function setColorBarsPref(on: boolean) {
+  try {
+    localStorage.setItem("budget.colorBars", on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Each category's share (%) of month `i`'s positive spending, in the given order; [] when there's nothing to stack. */
+export function stackShares(cats: { category_id: number; spent_cents: number[] }[], i: number): { category_id: number; pct: number }[] {
+  const vals = cats.map((c) => ({ category_id: c.category_id, v: Math.max(0, c.spent_cents[i] ?? 0) })).filter((c) => c.v > 0);
+  const sum = vals.reduce((a, c) => a + c.v, 0);
+  return sum ? vals.map((c) => ({ category_id: c.category_id, pct: (c.v / sum) * 100 })) : [];
+}
+
 export function applyTheme(t: Theme) {
   document.documentElement.dataset.theme = t;
   try {

@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { BudgetsResponse, Occurrence, RecurringListItem, SummaryResponse, UpcomingResponse } from "../../../shared/types";
+import type { BudgetsResponse, Occurrence, RecurringListItem, SummaryResponse, TrendsResponse, UpcomingResponse } from "../../../shared/types";
 import { useGet } from "../api";
 import { useApp } from "../app";
-import { axisLabel, axisStep, seriesEnd, fmtDate, fmtDateY, money, monthLabel, monthName, plural } from "../lib";
+import { axisLabel, axisStep, colorBarsPref, seriesEnd, fmtDate, fmtDateY, money, monthLabel, monthName, plural, stackShares } from "../lib";
 import { btnLink, btnPrimary, btnSecondary, Card, Dot, LoadErr, Loading, PageHead } from "../ui";
 
 const cardTitle = "text-[14.5px] font-semibold";
@@ -44,8 +44,9 @@ function FirstRun() {
 }
 
 /** Paired bars as plain HTML buttons (matches the design markup; native keyboard + focus). */
-function SeriesChart({ series, selected, onOpen, canSelect }: {
+function SeriesChart({ series, selected, onOpen, canSelect, segs }: {
   series: SummaryResponse["series"]; selected: string; onOpen: (m: string) => void; canSelect: (m: string) => boolean;
+  segs?: (m: string) => { color: string; pct: number }[];
 }) {
   const [hover, setHover] = useState<string | null>(null);
   const clamp = (n: number) => Math.max(0, n);
@@ -84,7 +85,9 @@ function SeriesChart({ series, selected, onOpen, canSelect }: {
               >
                 <div className={`flex min-h-0 w-full flex-1 items-end justify-center gap-1 ${on || hover === s.month ? "opacity-100" : "opacity-45"}`}>
                   <div className="w-[clamp(8px,26%,24px)] rounded-t-[3px] bg-pos" style={{ height: `${(s.income_cents / top) * 100}%` }} />
-                  <div className="w-[clamp(8px,26%,24px)] rounded-t-[3px] bg-spend" style={{ height: `${(clamp(s.spent_cents) / top) * 100}%` }} />
+                  <div className="flex w-[clamp(8px,26%,24px)] flex-col-reverse overflow-hidden rounded-t-[3px] bg-spend" style={{ height: `${(clamp(s.spent_cents) / top) * 100}%` }}>
+                    {segs?.(s.month).map((g, k) => <div key={k} className="shrink-0" style={{ height: `${g.pct}%`, background: g.color }} />)}
+                  </div>
                 </div>
                 <div className={`text-xs ${on ? "font-semibold text-ink" : "text-ink-3"}`}>{monthName(s.month).slice(0, 3)}</div>
               </button>
@@ -205,7 +208,17 @@ export function Dashboard() {
 
 function Loaded({ month, months, categories, to }: Pick<ReturnType<typeof useApp>, "month" | "months" | "categories" | "to">) {
   const nav = useNavigate();
-  const sum = useGet<SummaryResponse>(`/summary?month=${month}&series_end=${seriesEnd(month, months.earliest_month, months.current_month)}`);
+  const end = seriesEnd(month, months.earliest_month, months.current_month);
+  const sum = useGet<SummaryResponse>(`/summary?month=${month}&series_end=${end}`);
+  // category stacks for the spending bars come from /trends (12 months ending at the same `end` cover the 7-month window)
+  const tr = useGet<TrendsResponse>(colorBarsPref() ? `/trends?end=${end}` : null);
+  const color = new Map(categories.map((c) => [c.id, c.color]));
+  const segs = tr.data
+    ? (m: string) => {
+        const i = tr.data!.months.indexOf(m);
+        return i < 0 ? [] : stackShares(tr.data!.categories, i).map((s) => ({ pct: s.pct, color: color.get(s.category_id) ?? "var(--spend)" }));
+      }
+    : undefined;
   const bud = useGet<BudgetsResponse>(`/budgets?month=${month}`);
   const uncat = categories.find((c) => c.system_key === "uncategorized");
 
@@ -262,7 +275,7 @@ function Loaded({ month, months, categories, to }: Pick<ReturnType<typeof useApp
               <span className="flex items-center gap-[6px]"><span aria-hidden className="size-[9px] rounded-[2px] bg-spend" />Spending</span>
             </div>
           </div>
-          <SeriesChart series={s.series} selected={month} onOpen={openMonth} canSelect={canSelect} />
+          <SeriesChart series={s.series} selected={month} onOpen={openMonth} canSelect={canSelect} segs={segs} />
         </Card>
         <Card className="flex min-h-0 min-w-0 flex-[1_1_300px] flex-col gap-3 overflow-hidden px-5 py-[18px]">
           <UpcomingCard month={month} />

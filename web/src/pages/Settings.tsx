@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Account, AccountType, ApplyRulesResponse, CategoryWithCounts, Rule } from "../../../shared/types";
 import { api, ApiFail, useGet } from "../api";
 import { useApp } from "../app";
-import { fmtDate, plural, SWATCHES } from "../lib";
+import { colorBarsPref, fmtDate, plural, setColorBarsPref, SWATCHES } from "../lib";
 import { btnLink, btnPrimary, btnSecondary, Card, Chevron, Dot, inputCls, LoadErr, Loading, PageHead, Segmented, Select, Toggle } from "../ui";
 
 const TYPES: { value: AccountType; label: string }[] = [
@@ -25,6 +25,7 @@ function Section({ title, sub, action, children }: { title: string; sub?: string
 
 export default function Settings() {
   const { theme, setTheme, categories, accounts } = useApp();
+  const [colorBars, setColorBars] = useState(colorBarsPref);
   const rules = useGet<Rule[]>("/rules");
 
   return (
@@ -34,6 +35,13 @@ export default function Settings() {
         <div className="flex items-center justify-between gap-3 px-[18px] py-4">
           <span>Theme</span>
           <Segmented label="Theme" value={theme} onChange={setTheme} options={[["light", "Light"], ["dark", "Dark"]]} />
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-line px-[18px] py-4">
+          <span>
+            Color spending bars by category
+            <span className="block text-[12.5px] text-ink-3">Dashboard and Trends bars show each category's share of the month.</span>
+          </span>
+          <Toggle label="Color spending bars by category" on={colorBars} onChange={(v) => { setColorBars(v); setColorBarsPref(v); }} />
         </div>
       </Section>
 

@@ -155,3 +155,8 @@
 - **Gate fixes (2026-11-08):** snapshot happens only when an import commit will write rows (QA Medium); `GET /api/backup` sends `nosniff`; split parts capped at 100 (security Lows). QA GO, security GO; 4 failing server tests (migration 2, real-DB guard, receipts content-disposition, raw Host-header) fail identically on HEAD — pre-existing, not fixed in this run. No browser check: the sandbox blocks local binding, so the web layer has code-level QA only (typecheck + tests).
 - **Debt (shortcut:)** `shared/recurring.ts` detectRecurring: one series per merchant+sign, so a merchant with two cadences gets one suggestion.
 - **Backup mechanisms (2026-11-08):** the download uses `db.serialize()`; the automatic snapshots use `VACUUM INTO`.
+
+## 2026-11-08 — Color spending bars by category (setting)
+- Settings › Appearance toggle, per-browser `localStorage` (`budget.colorBars`), like the theme — a viewing preference, not data. Off by default.
+- Dashboard gets the per-category monthly split from the existing `GET /api/trends?end=<series end>` (its 12 months cover the 7-month window), fetched only when the setting is on. No API change.
+- Segments are each category's share of that month's positive category spend (`stackShares` in `web/src/lib.ts`), so the bar's height stays the Spent total (refunds included) and only the color split is proportional. Bottom-up in category sort order. Fixed categories are included.
