@@ -132,8 +132,9 @@ export default function Budgets() {
     }
   }
 
-  const total = b.total_budget_cents, over = b.spent_cents > total;
-  const pct = total > 0 ? Math.round((b.spent_cents / total) * 100) : 0;
+  // Summary is flexible spending only; fixed categories (rent etc.) are shown on their own line.
+  const total = b.total_budget_cents - b.fixed_budget_cents, spent = b.spent_cents - b.fixed_spent_cents, over = spent > total;
+  const pct = total > 0 ? Math.round((spent / total) * 100) : 0;
   const [y, m] = month.split("-").map(Number);
   const cur = months.current_month;
   const lastDay = new Date(y, m, 0).getDate();
@@ -155,8 +156,8 @@ export default function Budgets() {
         <div className="flex flex-wrap gap-x-10 gap-y-4">
           {[
             ["Total budget", money(total), ""],
-            ["Spent so far", money(b.spent_cents), ""],
-            [over ? "Over budget" : "Remaining", money(Math.abs(total - b.spent_cents)), over ? "text-neg" : ""],
+            [month === cur ? "Spent so far" : "Spent", money(spent), ""],
+            [over ? "Over budget" : "Remaining", money(Math.abs(total - spent)), over ? "text-neg" : ""],
           ].map(([l, v, c]) => (
             <div key={l}>
               <div className="text-[13px] text-ink-2">{l}</div>
@@ -165,11 +166,16 @@ export default function Budgets() {
           ))}
         </div>
         <div role="progressbar" aria-label="Share of total budget used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, pct)} className="h-[10px] overflow-hidden rounded-[5px] bg-track">
-          <div className={`h-full rounded-[5px] ${bar(b.spent_cents, total)}`} style={{ width: `${total > 0 ? Math.min(100, pct) : 0}%` }} />
+          <div className={`h-full rounded-[5px] ${bar(spent, total)}`} style={{ width: `${total > 0 ? Math.min(100, pct) : 0}%` }} />
         </div>
         <div className="text-[12.5px] text-ink-3">
-          {total > 0 ? `${pct}% of budget used${tail}` : `No budgets set for ${monthName(month)} yet. Copy last month's, or type amounts below.`}
+          {total > 0 ? `${pct}% of budget used${tail}` : b.fixed_budget_cents > 0 ? `Only fixed budgets set for ${monthName(month)}.` : `No budgets set for ${monthName(month)} yet. Copy last month's, or type amounts below.`}
         </div>
+        {(b.fixed_spent_cents > 0 || b.fixed_budget_cents > 0) && (
+          <div className="text-[12.5px] text-ink-3">
+            Fixed: {b.fixed_budget_cents > 0 ? `${money(b.fixed_spent_cents)} of ${money(b.fixed_budget_cents)}` : money(b.fixed_spent_cents)}
+          </div>
+        )}
       </Card>
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">

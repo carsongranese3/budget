@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Account, AccountType, ApplyRulesResponse, CategoryWithCounts, Rule } from "../../../shared/types";
 import { api, ApiFail, useGet } from "../api";
 import { useApp } from "../app";
-import { fmtDate, plural, SWATCHES } from "../lib";
+import { colorBarsPref, fmtDate, plural, setColorBarsPref, SWATCHES } from "../lib";
 import { btnLink, btnPrimary, btnSecondary, Card, Chevron, Dot, inputCls, LoadErr, Loading, PageHead, Segmented, Select, Toggle } from "../ui";
 
 const TYPES: { value: AccountType; label: string }[] = [
@@ -25,6 +25,7 @@ function Section({ title, sub, action, children }: { title: string; sub?: string
 
 export default function Settings() {
   const { theme, setTheme, categories, accounts } = useApp();
+  const [colorBars, setColorBars] = useState(colorBarsPref);
   const rules = useGet<Rule[]>("/rules");
 
   return (
@@ -34,6 +35,13 @@ export default function Settings() {
         <div className="flex items-center justify-between gap-3 px-[18px] py-4">
           <span>Theme</span>
           <Segmented label="Theme" value={theme} onChange={setTheme} options={[["light", "Light"], ["dark", "Dark"]]} />
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-line px-[18px] py-4">
+          <span>
+            Color spending bars by category
+            <span className="block text-[12.5px] text-ink-3">Dashboard and Trends bars show each category's share of the month.</span>
+          </span>
+          <Toggle label="Color spending bars by category" on={colorBars} onChange={(v) => { setColorBars(v); setColorBarsPref(v); }} />
         </div>
       </Section>
 
@@ -52,6 +60,14 @@ export default function Settings() {
             <tbody>{accounts.map((a) => <AccountRow key={a.id} a={a} />)}</tbody>
           </table>
         )}
+      </Section>
+
+      <Section title="Backup" sub="A snapshot is also saved automatically before each import and undo (newest 10 kept in data/backups/).">
+        <div className="flex items-center justify-between gap-3 px-[18px] py-4">
+          <span>Download a copy of your whole database.</span>
+          {/* plain link: the response is a file, not JSON */}
+          <a href="/api/backup" download className={`${btnSecondary} no-underline`}>Download backup</a>
+        </div>
       </Section>
 
       <Section title="Categories" action={<ReapplyRules disabled={!rules.data?.length} />} sub="Open a category to see its rules. Rules assign a category to imported transactions whose description contains the text.">
@@ -73,7 +89,14 @@ function CategoryList({ rules, loading, reloadRules }: { rules: Rule[]; loading:
   // Drop the optimistic order once the server list matches it, or holds a different set of ids (category added/removed elsewhere); a stale same-set refresh must not undo a later move.
   useEffect(() => setPending((p) => (p && (p.join() === serverIds.join() || [...p].sort().join() !== [...serverIds].sort().join()) ? null : p)), [categories]); // eslint-disable-line react-hooks/exhaustive-deps
   const ids = pending ?? serverIds;
-  const ordered = ids.map((id) => users.find((c) => c.id === id)).filter((c): c is CategoryWithCounts => !!c);
+  // While dragging, show the order a drop would produce right now.
+  const preview = (() => {
+    if (!drag || drag.over === drag.id) return ids;
+    const next = ids.filter((x) => x !== drag.id);
+    next.splice(next.indexOf(drag.over) + (drag.after ? 1 : 0), 0, drag.id);
+    return next;
+  })();
+  const ordered = preview.map((id) => users.find((c) => c.id === id)).filter((c): c is CategoryWithCounts => !!c);
 
   async function commit(next: number[]) {
     if (next.join() === ids.join()) return;
@@ -95,10 +118,8 @@ function CategoryList({ rules, loading, reloadRules }: { rules: Rule[]; loading:
   };
   function drop() {
     if (!drag) return;
-    const next = ids.filter((x) => x !== drag.id);
-    next.splice(next.indexOf(drag.over) + (drag.after ? 1 : 0), 0, drag.id);
     setDrag(null);
-    commit(next);
+    commit(preview);
   }
   const rulesOf = (id: number) => rules.filter((r) => r.category_id === id).sort((a, b) => a.merchant.localeCompare(b.merchant));
 
@@ -269,14 +290,12 @@ function CategoryRow({ c, rules, loading, reloadRules, order }: { c: CategoryWit
       onDragOver={order && ((e) => {
         if (!order.drag) return;
         e.preventDefault();
+        if (order.drag.id === c.id) return; // the placeholder row: rows shift under the cursor, don't re-target
         const r = e.currentTarget.firstElementChild!.getBoundingClientRect(); // header only, not the rules panel
         order.over(e.clientY > r.top + r.height / 2);
       })}
       onDrop={order && ((e) => { e.preventDefault(); order.drop(); })}
     >
-    {order?.drag && order.drag.id !== c.id && order.drag.over === c.id && (
-      <span aria-hidden className={`pointer-events-none absolute inset-x-0 z-10 h-[3px] bg-accent ${order.drag.after ? "bottom-0" : "top-0"}`} />
-    )}
     <div
       className="flex flex-wrap items-center gap-x-3 gap-y-2 px-[18px] py-2"
     >
@@ -334,6 +353,12 @@ function CategoryRow({ c, rules, loading, reloadRules, order }: { c: CategoryWit
         <label className="flex items-center gap-2 text-[13.5px] text-ink-2">
           Exclude from totals
           <Toggle label={`Exclude ${c.name} from totals`} on={c.excluded_from_totals} onChange={(v) => patch({ excluded_from_totals: v })} />
+        </label>
+      )}
+      {!locked && (
+        <label className="flex items-center gap-2 text-[13.5px] text-ink-2" title="Bills like rent; kept out of % used">
+          Fixed
+          <Toggle label={`Mark ${c.name} as fixed`} on={c.fixed} onChange={(v) => patch({ fixed: v })} />
         </label>
       )}
       {c.system_key === null && (

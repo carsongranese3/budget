@@ -1,5 +1,5 @@
-import { addDays, expectedFor, isValidDate, monthEnd, nextDate, statusOf, upcoming } from "../shared/recurring.js";
-import type { RecurringItem, RecurringListItem, UpcomingResponse } from "../shared/types.js";
+import { addDays, detectRecurring, expectedFor, isValidDate, monthEnd, nextDate, statusOf, upcoming } from "../shared/recurring.js";
+import type { RecurringItem, RecurringSuggestion, RecurringListItem, UpcomingResponse } from "../shared/types.js";
 import type { DB } from "./db.js";
 import { bad, int, label, obj, oneOf, str } from "./http.js";
 
@@ -9,7 +9,7 @@ export const recurringItems = (db: DB): RecurringItem[] =>
   (db.prepare("SELECT * FROM recurring_items ORDER BY id").all() as any[]).map((r) => ({ ...r, active: !!r.active }));
 
 export const txsBetween = (db: DB, lo: string, hi: string) =>
-  db.prepare("SELECT date, description, amount_cents FROM transactions WHERE date BETWEEN ? AND ?").all(lo, hi) as
+  db.prepare("SELECT date, description, amount_cents FROM transactions WHERE parent_id IS NULL AND date BETWEEN ? AND ?").all(lo, hi) as
     { date: string; description: string; amount_cents: number }[];
 
 export function listRecurring(db: DB, today: string): RecurringListItem[] {
@@ -92,4 +92,10 @@ export function updateRecurring(db: DB, id: number, body: unknown, today: string
   db.prepare(`UPDATE recurring_items SET ${keys.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`)
     .run(...keys.map((c) => (c === "active" ? (v.active ? 1 : 0) : v[c])), id);
   return listRecurring(db, today).find((i) => i.id === id)!;
+}
+
+export function suggestionsFor(db: DB): RecurringSuggestion[] {
+  const txs = db.prepare("SELECT date, description, amount_cents, category_id, account_id FROM transactions WHERE parent_id IS NULL AND is_split = 0")
+    .all() as Parameters<typeof detectRecurring>[0];
+  return detectRecurring(txs, recurringItems(db).map((i) => i.match_text));
 }

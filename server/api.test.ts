@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import http from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { detectFormat, parseCsvText } from "../shared/csv.js";
+import { createApp } from "./app.js";
 import { openDb } from "./db.js";
 import { startApp } from "../test/helpers.js";
 
@@ -375,5 +376,32 @@ describe("categories: reorder edge cases (QA)", () => {
     const r = await app.call("PUT", "/api/categories/order", { ids: [] });
     expect(r.status).toBe(200);
     expect(r.body.map((c: any) => c.system_key)).toEqual(["income", "transfer", "uncategorized"]);
+  });
+});
+
+describe("real-DB guard", () => {
+  it("sample-data and erase return 403 on data/budget.db (in a temp cwd)", async () => {
+    const cwd = process.cwd();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "budget-guard-"));
+    process.chdir(dir);
+    try {
+      const db = openDb("data/budget.db");
+      const before = db.prepare("SELECT count(*) n FROM categories").get();
+      db.prepare("INSERT INTO accounts (name) VALUES ('keep')").run();
+      const server = createApp(db, () => "2026-10-25").listen(0, "127.0.0.1");
+      await new Promise((r) => server.once("listening", r));
+      const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/api`;
+      for (const [method, url] of [["POST", "/sample-data"], ["DELETE", "/data"]]) {
+        const res = await fetch(base + url, { method, headers: { "content-type": "application/json" }, body: "{}" });
+        expect(res.status).toBe(403);
+      }
+      expect(db.prepare("SELECT count(*) n FROM accounts WHERE name='keep'").get()).toEqual({ n: 1 });
+      expect(before).toBeTruthy();
+      server.close();
+      db.close();
+    } finally {
+      process.chdir(cwd);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

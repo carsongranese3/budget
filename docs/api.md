@@ -27,7 +27,7 @@ Every non-2xx response has this body:
 | 400 | `validation` | bad/missing body field, bad query param, rule merchant < 3 chars, amount 0 on a recurring item, etc. |
 | 400 | `invalid_file` | CSV rejected (spec IM-2 / edge 14). `message` is the user-facing copy: "This doesn't look like a CSV export.", "This file is too large (max 10 MB).", "This file has no transactions in it." |
 | 400 | `nothing_to_import` | commit would insert 0 rows (all duplicates). Nothing is written. |
-| 403 | `forbidden` | `Origin` header present and not localhost/127.0.0.1/[::1] (CSRF guard); a `Host` header that isn't localhost/127.0.0.1/[::1] on any request (DNS-rebinding guard); deleting/renaming/excluding a locked or system category |
+| 403 | `forbidden` | `Origin` header present and not localhost/127.0.0.1/[::1] (CSRF guard); a `Host` header that isn't localhost/127.0.0.1/[::1] on any request (DNS-rebinding guard); deleting/renaming/excluding a locked or system category; `POST /api/sample-data` and `DELETE /api/data` when the DB is the real `data/budget.db` (real-DB guard; `:memory:` and other `BUDGET_DB` paths work) |
 | 404 | `not_found` | unknown id, or unknown `/api/*` route |
 | 409 | `conflict` | duplicate name (account, category), duplicate rule merchant on PATCH |
 | 413 | `payload_too_large` | body > 15 MB |
@@ -59,6 +59,7 @@ Account = {
 Category = {
   id: number; name: string; color: string;       // one of the 11 swatch oklch strings
   excluded_from_totals: boolean;
+  fixed: boolean;                      // rent etc.; Budgets page reports it separately from flexible spending
   system_key: "income" | "transfer" | "uncategorized" | null;
   sort_order: number;
 }
@@ -73,6 +74,10 @@ Rule = { id: number; merchant: string; category_id: number; created_at: string }
 Transaction = {
   id: number; account_id: number; date: string; description: string;
   amount_cents: number; category_id: number; import_id: number; created_at: string;
+  note: string | null; custom_description: string | null; receipt_count: number;
+  original_date: string | null;     // bank date, only when `date` was edited
+  parent_id: number | null;         // set on split parts = the (hidden) split parent's id
+  split_total_cents: number | null; // parts only: the parent's full amount (signed); null otherwise
 }
 
 ImportRecord = {
@@ -120,7 +125,7 @@ Occurrence = {                       // one expected/upcoming payment
 
 **POST `/api/categories`** — body `{ "name": string }` -> 201 `CategoryWithCounts`. Server trims, enforces 1–40 chars and case-insensitive uniqueness (409), picks the next swatch color in rotation, inserts before Income.
 
-**PATCH `/api/categories/:id`** — body (all optional): `{ "name"?: string, "color"?: string, "excluded_from_totals"?: boolean }` -> 200 `CategoryWithCounts`. 403 `forbidden` when renaming Income/Uncategorized, or setting `excluded_from_totals` on Income/Uncategorized. 409 on duplicate name. 400 if `color` isn't one of the 11 swatches.
+**PATCH `/api/categories/:id`** — body (all optional): `{ "name"?: string, "color"?: string, "excluded_from_totals"?: boolean, "fixed"?: boolean }` -> 200 `CategoryWithCounts`. 400 if `fixed` isn't a boolean. 403 `forbidden` when renaming Income/Uncategorized, or changing `excluded_from_totals` or `fixed` on Income/Uncategorized. 409 on duplicate name. 400 if `color` isn't one of the 11 swatches.
 
 **PUT `/api/categories/order`** — body `{ "ids": number[] }` (`ReorderCategoriesRequest`) = every non-system category id exactly once, in the new order -> 200 `CategoryWithCounts[]` (same as GET). One transaction: `sort_order` 0..n-1 for `ids`, then the built-ins (Income, Transfer, Uncategorized) after them in their existing relative order. 400 `validation` for non-array/non-integer ids, missing, extra, duplicate, unknown, or built-in ids. Create still inserts above the built-ins.
 
@@ -142,13 +147,28 @@ Occurrence = {                       // one expected/upcoming payment
 
 ### Transactions
 
-**GET `/api/transactions?month=YYYY-MM[&q=text][&account=ID][&category=ID]`** -> 200
+**GET `/api/transactions?month=YYYY-MM[&all=1][&q=text][&account=ID][&category=ID][&day=YYYY-MM-DD]`** -> 200
 ```json
 { "transactions": [Transaction], "income_cents": 240000, "spent_cents": 81234 }
 ```
-Sorted `date` desc, `id` desc. `q` is a case-insensitive substring of `description`; filters AND together. `income_cents`/`spent_cents` use spec G6 over the **filtered** list (TX-1); count = `transactions.length`.
+Sorted `date` desc, `id` desc. Filters AND together. `month` is required unless `all=1`. `all=1` (exactly the string `1`) drops the month filter (a `month` sent with it is ignored but still must be valid if present); `q`, `account`, `category`, `day` still apply. `q` is a case-insensitive substring of `description` OR `custom_description`, max 200 chars (else 400 `validation`). `day` must be a real calendar date `YYYY-MM-DD` (else 400 `validation`); when `month` is also given (and `all` isn't 1) a `day` outside that month -> 400 `validation`. Without `all=1` and without `month` -> 400. **Split parents are never returned; split parts are returned as normal rows** (with `parent_id` and `split_total_cents` set). `income_cents`/`spent_cents` use spec G6 over the **filtered** list (TX-1); count = `transactions.length`.
 
-**PATCH `/api/transactions/:id`** — body `{ "category_id": number }` -> 200 `Transaction`. No rule side effects (rules are created only through `POST /api/rules`).
+**PATCH `/api/transactions`** — bulk category change. Body `BulkCategoryRequest = { "ids": number[], "category_id": number }` -> 200 `BulkCategoryResponse = { "updated_count": number, "transactions": Transaction[] }`. `ids`: 1-500 unique positive integers (else 400 `validation`); `category_id` must be an existing category (else 400 `validation`). Any id that doesn't exist -> 404 `not_found` (nothing changed); any id that is a split parent -> 400 `validation` (parts are fine). One SQLite transaction, all-or-nothing. `transactions` = the updated rows in the order of `ids`; `updated_count` = `ids.length` (rows already in that category still count). No rule side effects; the client decides about a rule prompt.
+
+**PATCH `/api/transactions/:id`** — body `{ "category_id"?: number, "note"?: string | null, "custom_description"?: string | null, "date"?: string }` (at least one key, else 400) -> 200 `Transaction`. Text is trimmed; empty string or `null` clears to `null`. `note` max 2000 chars, `custom_description` max 200. No rule side effects (rules are created only through `POST /api/rules`). `date` must be a real calendar date `YYYY-MM-DD` (else 400 `validation`). The first date change stores the bank date in `original_date`; setting `date` back to `original_date` clears it to `null`. Re-import duplicate detection compares against `COALESCE(original_date, date)`. Split parts: `category_id`, `note`, `custom_description` edit just that part; `date` moves the whole group (parent and every part; `original_date` handled on each row). A split parent's id -> 400 `validation` ("Edit the parts"), since parents are hidden.
+
+**Splits** (parent stays in the DB, hidden from lists/totals; parts are `Transaction` rows with `parent_id`, copying the parent's account, date, original_date, description, custom_description, import).
+`SplitPartInput = { amount_cents: number, category_id: number, note?: string | null }`.
+- **POST `/api/transactions/:id/split`** — body `SplitRequest = { "parts": SplitPartInput[] }` -> 200 `Transaction[]` (the parts, in the order sent; ascending `id`). `:id` may be an unsplit transaction, a split parent's id, or **any part's id** — when the target is already split the existing parts are replaced (re-split, one SQL transaction); the group is always resolved to its parent. Rules: 2-100 parts; each `amount_cents` a non-zero integer with the same sign as the parent; sum exactly equals the parent's `amount_cents`; every `category_id` exists; `note` trimmed, max 2000, empty -> null. Violations -> 400 `validation` (message says what is wrong, e.g. "Parts must add up to -$42.10"). 404 if `:id` is missing. Receipts: attached to the parent on first split -> move to the first part; on re-split they stay with the (new) first part.
+- **GET `/api/transactions/:id/split`** — `:id` = parent or any part -> 200 `SplitGroup = { "parent": Transaction, "parts": Transaction[] }` (`parent.parent_id` null; `parent.category_id` is its old/unused category). 404 if missing; 400 `validation` if the transaction isn't split. The drawer's "part of a split" view uses the part's own `split_total_cents` and this endpoint for siblings.
+- **DELETE `/api/transactions/:id/split`** — `:id` = parent or any part -> 200 `Transaction` (the restored parent, now visible again). Deletes the parts; receipts move back to the parent; part notes/categories are discarded. 404 if missing; 400 `validation` if not split.
+
+**Receipts** (stored as blobs in SQLite; cascade-deleted with their transaction, e.g. import undo and erase-all).
+`Receipt = { id, transaction_id, file_name, mime_type, size_bytes, created_at }`.
+- **GET `/api/transactions/:id/receipts`** -> 200 `Receipt[]` (oldest first); 404 if the transaction is missing.
+- **POST `/api/transactions/:id/receipts`** — body `{ "file_name": string (1-200), "content_base64": string }` -> 201 `Receipt`. 404 if the transaction is missing; 413 `payload_too_large` if the decoded file is over 10 MB; 400 `validation` if the base64 is invalid or the bytes aren't PNG/JPEG/WebP/PDF ("Receipt must be a PNG, JPEG, WebP or PDF"). Type is decided by magic bytes only; `file_name` is display-only.
+- **GET `/api/receipts/:id`** -> 200 raw bytes with the stored `Content-Type`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, `Cross-Origin-Resource-Policy: same-origin`, `Content-Disposition: inline; filename="<ascii-sanitized>"; filename*=UTF-8''<percent-encoded>`. PDFs also get `X-Frame-Options: SAMEORIGIN`. Images also get `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`; PDFs get no CSP/sandbox (only the frame option above) (not verified in a browser, but those break Chrome's PDF viewer). 404 if missing.
+- **DELETE `/api/receipts/:id`** -> 204; 404 if missing.
 
 **GET `/api/transactions/uncategorized-count?month=YYYY-MM`** -> 200 `{ "count": number }` (nav badge, SH-2).
 
@@ -226,9 +246,13 @@ Exactly one of `account_id` / `new_account` is set (400 otherwise). Overrides on
 
 ### Data management
 
-**POST `/api/sample-data`** -> 204. Replaces all data with the seeded sample set (accounts, ~6 months of transactions grouped into `imports`, rules, recurring items with past anchors, budgets). The confirmation is client-side.
+**GET `/api/backup`** -> 200 raw bytes: a consistent copy of the SQLite DB (via better-sqlite3 `db.serialize()`, includes WAL contents, never a raw file copy; automatic snapshots use `VACUUM INTO`). `Content-Type: application/vnd.sqlite3`, `Content-Disposition: attachment; filename="budget-backup-YYYY-MM-DD.db"` (local date), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. Works for `:memory:` too. Restore is a manual file swap.
 
-**DELETE `/api/data`** -> 204. Erases every row in every table and re-seeds the default categories.
+**Automatic snapshots (server behavior, no endpoint):** before `POST /api/imports` writes (after validation succeeds) and before `DELETE /api/imports/:id`, the server writes a consistent snapshot into `<dirname(db.name)>/backups/` (`data/backups/`, git-ignored; file name `budget-<timestamp>.db`), then deletes all but the newest 10. No-op for `:memory:`. If the snapshot fails the request fails with 500 `internal` and nothing is written.
+
+**POST `/api/sample-data`** -> 204. Replaces all data with the seeded sample set (accounts, ~6 months of transactions grouped into `imports`, rules, recurring items with past anchors, budgets). The confirmation is client-side. -> 403 `forbidden` if the DB is the real default `data/budget.db` (test-only; use `BUDGET_DB`).
+
+**DELETE `/api/data`** -> 204. Erases every row in every table and re-seeds the default categories. -> 403 `forbidden` if the DB is the real default `data/budget.db` (test-only; use `BUDGET_DB`).
 
 ---
 
@@ -252,7 +276,7 @@ Exactly one of `account_id` / `new_account` is set (400 otherwise). Overrides on
   "series": [{ "month": "2026-05", "income_cents": 480000, "spent_cents": 300000 }]
 }
 ```
-All totals per spec G6. `income_count` = Income-category transactions in the month ("N deposits"); `spent_count` = counted non-Income transactions ("N transactions"); `uncategorized_count` = Uncategorized in the month (DB-4). `by_category`: counted non-Income categories (Uncategorized included) with spending > 0, largest first (DB-7). `series`: 7 entries ascending, ending at `series_end` (default `month`). `series_end` must be a valid month with `month` inside the window (`month` ≤ `series_end` ≤ `month`+6), else 400 `validation` (`spent_cents` may be negative; the chart clamps at 0). `expected_*_cents` are the §6.4 values and are never added to the totals. The dashboard's empty state uses `has_transactions` from `/api/months`.
+All totals per spec G6. `income_count` = Income-category transactions in the month ("N deposits"); `spent_count` = counted non-Income transactions ("N transactions"); `uncategorized_count` = Uncategorized in the month (DB-4). `by_category`: counted non-Income, non-`fixed` categories (Uncategorized included) with spending > 0, largest first (DB-7). `series`: 7 entries ascending, ending at `series_end` (default `month`). `series_end` must be a valid month with `month` inside the window (`month` ≤ `series_end` ≤ `month`+6), else 400 `validation` (`spent_cents` may be negative; the chart clamps at 0). `expected_*_cents` are the §6.4 values and are never added to the totals. The dashboard's empty state uses `has_transactions` from `/api/months`.
 
 ### Budgets
 
@@ -263,10 +287,12 @@ All totals per spec G6. `income_count` = Income-category transactions in the mon
   "items": [{ "category_id": 4, "budget_cents": 45000, "spent_cents": 31240 }],
   "other": { "budget_cents": 20000, "spent_cents": 8000 },
   "total_budget_cents": 65000,
-  "spent_cents": 31240
+  "spent_cents": 31240,
+  "fixed_budget_cents": 45000,
+  "fixed_spent_cents": 31240
 }
 ```
-`other` = the "Other" budget for unbudgeted spending: `other.spent_cents` = sum of `items[].spent_cents` where `budget_cents` is `null` (shrinks when a category gets its own budget); `other.budget_cents` is `null` when unset. `budget_cents` is `null` when no budget is set. `items[].spent_cents` is clamped at ≥ 0. `total_budget_cents` = sum of the month's budgets over eligible categories plus `other.budget_cents`; top-level `spent_cents` = spending across all eligible categories (BU-3). Items are in category `sort_order`. The Dashboard's budget progress uses the items with non-null `budget_cents`.
+`other` = the "Other" budget for unbudgeted spending: `other.spent_cents` = sum of `items[].spent_cents` where `budget_cents` is `null` and the category isn't `fixed` (shrinks when a category gets its own budget); `other.budget_cents` is `null` when unset. `budget_cents` is `null` when no budget is set. `items[].spent_cents` is clamped at ≥ 0. `total_budget_cents` = sum of the month's budgets over eligible categories plus `other.budget_cents`; top-level `spent_cents` = spending across all eligible categories (BU-3). `fixed_budget_cents` = sum of non-null budgets of eligible `fixed` categories; `fixed_spent_cents` = sum of `items[].spent_cents` of eligible `fixed` categories (budgeted or not). Both are already included in `total_budget_cents` / `spent_cents` (which stay all-inclusive); the page derives flexible = total − fixed. Items are in category `sort_order`. The Dashboard's budget progress uses the items with non-null `budget_cents` (shown even at $0 spent), then an "Other" row when `other.budget_cents` is non-null.
 
 **GET `/api/budgets?month=YYYY-MM`** -> 200 `BudgetsResponse`.
 
@@ -297,7 +323,32 @@ All totals per spec G6. `income_count` = Income-category transactions in the mon
 ```
 `expected`: active items' unreceived occurrences in `[month start, min(month end, today)]` (§6.4; empty for future months). `upcoming`: next 10 occurrences strictly after today across active items, by date then name (§6.5; independent of `month`).
 
+**GET `/api/recurring/suggestions`** -> 200 `RecurringSuggestion[]`
+```json
+[{ "merchant": "NETFLIX", "name": "Netflix", "amount_cents": -1599, "frequency": "monthly",
+   "category_id": 6, "account_id": 1, "last_date": "2026-10-03", "next_date": "2026-11-03", "occurrences": 5 }]
+```
+Detected from history (parts and split parents ignored) by `shared/recurring.ts`. `merchant` = suggested `match_text` (uppercase); `name` = display name; `amount_cents` = typical signed amount; `category_id` = most common category of the matches; `account_id` = their account; `next_date` = suggested `anchor_date` (first expected date after `last_date`, may be in the past). Excludes any merchant already covered by an existing recurring item (active or not, by `match_text`). Sorted by `occurrences` desc, then `merchant`. `[]` when none. Dismiss is client-side only. To accept, the client POSTs `/api/recurring` with `{ name, amount_cents, category_id, account_id, frequency, anchor_date: next_date, match_text: merchant }`.
+
 Recurring matches also surface in `POST /api/imports` (`matched_recurring`) and `GET /api/summary` (`expected_income_cents`, `expected_spent_cents`).
+
+---
+
+## Slice 5
+
+### Trends
+
+**GET `/api/trends[?end=YYYY-MM]`** -> 200 `TrendsResponse`. `end` defaults to the current month; must be a valid month (years 1900-2099), else 400 `validation`.
+```json
+{
+  "months": ["2025-12", "...", "2026-11"],
+  "income_cents": [0, 0],
+  "spent_cents": [0, 0],
+  "categories": [{ "category_id": 4, "spent_cents": [0, 0] }],
+  "ytd": { "year": 2026, "income_cents": 0, "spent_cents": 0, "categories": [{ "category_id": 4, "spent_cents": 0 }] }
+}
+```
+`months` = 12 ascending months ending at `end`; each array has 12 entries aligned to it. `income_cents`/`spent_cents` per month use spec G6 exactly like `series` in `/api/summary` (`spent_cents` may be negative; the chart clamps). `categories` = counted (not excluded), non-Income categories that have any spending in the window (Uncategorized included), per-month `spent_cents` clamped at ≥ 0 (same rules as `by_category`/Budgets spend, but **including** `fixed` categories); ordered by `sort_order`. `ytd` = January 1 of `end`'s year through the end of `end` (so `year` = year of `end`); `ytd.categories` = same rule over that range, categories with spend > 0, largest first. Split parents are never counted; parts are.
 
 ---
 
@@ -316,6 +367,13 @@ Recurring matches also surface in `POST /api/imports` (`matched_recurring`) and 
 | 1 | PATCH, DELETE | `/api/rules/:id` |
 | 1 | GET | `/api/transactions`, `/api/transactions/uncategorized-count` |
 | 1 | PATCH | `/api/transactions/:id` |
+| 5 | PATCH | `/api/transactions` (bulk category) |
+| 5 | GET, POST, DELETE | `/api/transactions/:id/split` |
+| 5 | GET | `/api/backup` |
+| 5 | GET | `/api/recurring/suggestions` |
+| 5 | GET | `/api/trends` |
+| 4 | GET, POST | `/api/transactions/:id/receipts` |
+| 4 | GET, DELETE | `/api/receipts/:id` |
 | 1 | GET | `/api/imports`, `/api/imports/sample-csv` |
 | 1 | POST | `/api/imports/preview`, `/api/imports` |
 | 1 | DELETE | `/api/imports/:id` |

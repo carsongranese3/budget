@@ -14,7 +14,8 @@ Source: claude.ai/design project `c1a59d7f-63ba-4a12-a3f7-a867b982bc10` ("Budget
 |---|---|---|
 | App shell: top bar, nav, month picker, theme toggle | layout for every route | month is a `?month=YYYY-MM` URL param; theme in `localStorage` |
 | Dashboard (tiles, income vs spending chart, upcoming recurring, spending by category, budget progress, first-run empty state) | `/` | monthly summary + recurring occurrences |
-| Transactions (filters, inline category dropdown, create-rule prompt) | `/transactions` | transactions list + update category + rules |
+| Transactions (filters, inline category dropdown, create-rule prompt, detail drawer: notes, receipts, custom description, editable date) | `/transactions` | transactions list + update category/note/custom_description/date + receipts + rules |
+| Chart — not in the prototype (running-net line, $0 centered, clickable day nodes → day's transactions) | `/chart` | transactions list (`GET /api/transactions?month=`) |
 | Import (Upload → Set up file → Review → Done) | `/import` | CSV preview/parse, account formats, commit import, import log |
 | Budgets (summary, editable per-category table, copy last month) | `/budgets` | budgets per month |
 | Recurring (table, status chips, add side panel) | `/recurring` | recurring items + matched status |

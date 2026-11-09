@@ -44,6 +44,29 @@ export function initialTheme(): Theme {
   }
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
+// Per-browser preference: stack the spending bars (Dashboard + Trends) in category colors.
+export function colorBarsPref(): boolean {
+  try {
+    return localStorage.getItem("budget.colorBars") === "1";
+  } catch {
+    return false;
+  }
+}
+export function setColorBarsPref(on: boolean) {
+  try {
+    localStorage.setItem("budget.colorBars", on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Each category's share (%) of month `i`'s positive spending, in the given order; [] when there's nothing to stack. */
+export function stackShares(cats: { category_id: number; spent_cents: number[] }[], i: number): { category_id: number; pct: number }[] {
+  const vals = cats.map((c) => ({ category_id: c.category_id, v: Math.max(0, c.spent_cents[i] ?? 0) })).filter((c) => c.v > 0);
+  const sum = vals.reduce((a, c) => a + c.v, 0);
+  return sum ? vals.map((c) => ({ category_id: c.category_id, pct: (c.v / sum) * 100 })) : [];
+}
+
 export function applyTheme(t: Theme) {
   document.documentElement.dataset.theme = t;
   try {
@@ -67,8 +90,9 @@ export function localDate(iso: string): string {
 }
 
 /** Query string for GET /transactions; empty or invalid filters are omitted (treated as All). */
-export function txQuery(month: string, q: string, account: string, category: string, validCategoryIds: number[]): string {
-  const u = new URLSearchParams({ month });
+export function txQuery(month: string, q: string, account: string, category: string, validCategoryIds: number[], all = false, day = ""): string {
+  const u = new URLSearchParams(all ? { all: "1" } : { month });
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day)) u.set("day", day);
   if (q) u.set("q", q);
   if (/^\d+$/.test(account)) u.set("account", account);
   if (/^\d+$/.test(category) && validCategoryIds.includes(Number(category))) u.set("category", category);
@@ -100,4 +124,12 @@ export function axisLabel(cents: number): string {
 /** y-axis step in cents (DB-5): max($500, ceil(max/4/$500) x $500). */
 export function axisStep(maxCents: number): number {
   return Math.max(50000, Math.ceil(maxCents / 4 / 50000) * 50000);
+}
+
+/** True when a global shortcut key should be ignored: modifiers, typing in a field, an open dialog or menu. */
+export function shortcutBlocked(e: KeyboardEvent): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return true;
+  const t = e.target as HTMLElement | null;
+  if (t?.closest?.("input:not([type=checkbox]), textarea, select, [contenteditable]:not([contenteditable=false])")) return true;
+  return !!document.querySelector("dialog[open], [role=menu]");
 }

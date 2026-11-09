@@ -9,7 +9,7 @@ export const notFound = (m = "Not found.") => new HttpError(404, "not_found", m)
 const LABELS: Record<string, string> = {
   anchor_date: "next date", amount_cents: "amount", category_id: "category", account_id: "account", match_text: "match text",
   file_name: "file name", sign_mode: "sign mode", date_format: "date format", save_format: "save format",
-  category_overrides: "category overrides", excluded_from_totals: "excluded from totals", "format.has_header": "has header",
+  category_overrides: "category overrides", excluded_from_totals: "excluded from totals", fixed: "fixed", "format.has_header": "has header",
 };
 /** Human label for a field name, capitalized for the start of a sentence. */
 export const label = (f: string) => { const t = LABELS[f] ?? f.replace(/_/g, " "); return t[0].toUpperCase() + t.slice(1); };

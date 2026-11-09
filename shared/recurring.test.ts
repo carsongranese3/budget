@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expectedFor, isReceived, newlyReceived, nextDate, occurrences, statusOf, upcoming } from "./recurring.js";
+import { detectRecurring, expectedFor, isReceived, newlyReceived, nextDate, occurrences, statusOf, upcoming } from "./recurring.js";
 
 const mk = (o: any = {}) => ({ id: 1, name: "Rent", amount_cents: -100000, category_id: 1, account_id: null, frequency: "monthly" as const,
   anchor_date: "2026-01-31", match_text: "RENT", active: true, ...o });
@@ -98,5 +98,31 @@ describe("slice3 gate fixes", () => {
     expect(pd("1899-12-31")).toBeNull();
     expect(pd("2100-01-01")).toBeNull();
     expect(pd("1900-01-01")).toBe("1900-01-01");
+  });
+});
+
+describe("detectRecurring", () => {
+  const t = (date: string, description: string, amount_cents: number, category_id = 6, account_id = 1) => ({ date, description, amount_cents, category_id, account_id });
+  const netflix = ["2026-06-03", "2026-07-03", "2026-08-03", "2026-09-03", "2026-10-03"].map((d) => t(d, `NETFLIX.COM ${d.slice(5, 7)}`, -1599));
+
+  it("finds a monthly series with next date after the last hit", () => {
+    expect(detectRecurring(netflix, [])).toEqual([{
+      merchant: "NETFLIX.COM", name: "Netflix.Com", amount_cents: -1599, frequency: "monthly", category_id: 6, account_id: 1,
+      last_date: "2026-10-03", next_date: "2026-11-03", occurrences: 5,
+    }]);
+  });
+  it("finds biweekly pay and ignores amount outliers", () => {
+    const pay = ["2026-09-04", "2026-09-18", "2026-10-02", "2026-10-16"].map((d) => t(d, "ACME PAYROLL", 200000, 9));
+    const r = detectRecurring([...pay, t("2026-10-09", "ACME PAYROLL", 50000, 9)], []);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ frequency: "biweekly", occurrences: 4, next_date: "2026-10-30" });
+  });
+  it("needs 3 hits, a cadence, and one sign", () => {
+    expect(detectRecurring(netflix.slice(0, 2), [])).toEqual([]);
+    expect(detectRecurring(["2026-01-01", "2026-01-09", "2026-02-20", "2026-05-02"].map((d) => t(d, "RANDOM CAFE", -500)), [])).toEqual([]);
+    expect(detectRecurring(netflix.map((x, i) => (i % 2 ? { ...x, amount_cents: 1599 } : x)), [])).toEqual([]);
+  });
+  it("skips merchants already covered by a recurring item", () => {
+    expect(detectRecurring(netflix, ["NETFLIX.COM"])).toEqual([]);
   });
 });

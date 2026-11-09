@@ -24,7 +24,7 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
 
 ## Conventions
 - One repo, one `package.json`: `server/` (Express API + SQLite), `web/` (React app, Vite root), `shared/` (API types in
-  `shared/types.ts` plus pure logic both sides use: `csv.ts` parser, `merchant.ts`, `totals.ts`). Tests sit next to the
+  `shared/types.ts` plus pure logic both sides use: `csv.ts` parser, `merchant.ts`, `totals.ts` incl. `dailyRunningNet`/`isCounted` for the Chart page). Tests sit next to the
   code as `*.test.ts`; CSV fixtures in `test/fixtures/`, API test helper in `test/helpers.ts` (`:memory:` DB).
 - Every non-GET API request is `Content-Type: application/json` (send `{}` when body-less) — the server rejects
   anything else (CSRF guard). The server binds 127.0.0.1 only.
@@ -34,6 +34,10 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
 - Financial data never leaves the machine: no telemetry, no third-party calls, the DB file and any sample
   statements stay out of git.
 - Field names are defined in specs and endpoint docs — match them exactly, do not invent.
+- Split transactions: a split parent (`is_split = 1`) is hidden everywhere via the `VISIBLE` SQL predicate in
+  `server/db.ts`; only import dedupe/counts and recurring matching read parents (`parent_id IS NULL`). Any new
+  query over `transactions` must pick one of the two.
+- Keyboard shortcuts go through `shortcutBlocked(e)` in `web/src/lib.ts` (skips inputs, open dialogs/menus, modifiers).
 
 ## Where things live
 - Specs: `specs/`
@@ -41,7 +45,9 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
 - Normalized data shapes: `docs/data-shapes.md` — not used: the app has no external data sources; the data model is
   in `specs/budget-v1.md` and `shared/types.ts`
 - Pure shared logic: `shared/` (`csv.ts`, `merchant.ts`, `totals.ts`, `recurring.ts`); server routes in `server/app.ts`
-  (+ `imports.ts`, `recurring.ts`), schema/migrations in `server/db.ts`; pages in `web/src/pages/`
+  (+ `imports.ts`, `recurring.ts`, `backup.ts`, `http.ts` validators, `sample.ts`), schema/migrations in `server/db.ts`;
+  pages in `web/src/pages/` (incl. `Trends.tsx`)
+- DB snapshots: `backups/` next to the DB file (`data/backups/`, git-ignored), newest 10, taken before import commit/undo
 - Decisions log: `docs/decisions.md`
 - Design reference, if a prototype was provided: `design/` (pulled files) + `docs/design.md` (mapping)
 
@@ -53,6 +59,8 @@ charts, and recurring transactions (rent, paycheck, subscriptions).
   API tests bind a loopback port; in the Claude Code sandbox that needs `sandbox.network.allowLocalBinding: true`.
 - Typecheck: `npm run typecheck`
 - Build: `npm run build` (vite build + typecheck)
+- Test run (isolated): `npm run dev:isolated` (API 127.0.0.1:5184 + web http://localhost:5183, throwaway DB at
+  `$TMPDIR/budget-qa.db` or `BUDGET_DB`). Agents use this, never `npm run dev`. Needs local binding (see above).
 - `npm start` runs the API only (no static hosting of `dist/`); use `npm run dev` to use the app.
 
 ---

@@ -41,3 +41,24 @@ export function spendByCategory(
   }
   return out;
 }
+
+/** Same G6 counting rule as computeTotals, for a single transaction. */
+export function isCounted(t: { amount_cents: number; category_id: number }, categories: TotalsCategory[]): boolean {
+  const c = categories.find((x) => x.id === t.category_id);
+  return !!c && !c.excluded_from_totals && !(c.system_key === "uncategorized" && t.amount_cents > 0);
+}
+
+/** Running cumulative net at the end of each day: result[0] = day 1 … result[n-1] = last day. Integer cents. */
+export function dailyRunningNet(
+  txs: { date: string; amount_cents: number; category_id: number }[],
+  categories: TotalsCategory[],
+  daysInMonth: number,
+): number[] {
+  const delta = new Array<number>(daysInMonth).fill(0);
+  for (const t of txs) {
+    const d = Number(t.date.slice(8, 10));
+    if (d >= 1 && d <= daysInMonth && isCounted(t, categories)) delta[d - 1] += t.amount_cents;
+  }
+  let run = 0;
+  return delta.map((x) => (run += x));
+}

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { CreateRecurringRequest, Frequency, RecurringListItem } from "../../../shared/types";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { CreateRecurringRequest, Frequency, RecurringListItem, RecurringSuggestion } from "../../../shared/types";
 import { api, useGet } from "../api";
 import { useApp } from "../app";
 import { cleanDollars, centsToInput, dollarsToCents, fmtDate, fmtDateY, money } from "../lib";
@@ -35,7 +35,7 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
 
 /** Right-hand sheet on a native modal <dialog>: focus trap, Esc, inert page and focus return come for free. */
 function Panel({ item, trigger, onClose, onChanged }: {
-  item: RecurringListItem | "new" | null; trigger: HTMLElement | null; onClose: () => void; onChanged: (deleted?: boolean) => void;
+  item: RecurringListItem | RecurringSuggestion | "new" | null; trigger: HTMLElement | null; onClose: () => void; onChanged: (deleted?: boolean) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -57,19 +57,21 @@ function Panel({ item, trigger, onClose, onChanged }: {
   );
 }
 
-function Form({ item, onClose, onChanged }: { item: RecurringListItem | "new"; onClose: () => void; onChanged: (deleted?: boolean) => void }) {
+function Form({ item, onClose, onChanged }: { item: RecurringListItem | RecurringSuggestion | "new"; onClose: () => void; onChanged: (deleted?: boolean) => void }) {
   const { categories, accounts, months, toast, fail, confirm } = useApp();
-  const edit = item === "new" ? null : item;
+  const sug = typeof item === "object" && "merchant" in item ? item : null; // prefilled from a suggestion; saves as a new item
+  const edit = item === "new" || sug ? null : (item as RecurringListItem);
   const subs = categories.find((c) => c.name === "Subscriptions") ?? categories[0];
   const incomeCat = categories.find((c) => c.system_key === "income") ?? categories[0];
-  const [name, setName] = useState(edit?.name ?? "");
-  const [type, setType] = useState<"expense" | "income">(edit && edit.amount_cents > 0 ? "income" : "expense");
-  const [amount, setAmount] = useState(edit ? centsToInput(Math.abs(edit.amount_cents)) : "");
-  const [cat, setCat] = useState<number>(edit?.category_id ?? subs.id);
-  const [acct, setAcct] = useState<number | null>(edit ? edit.account_id : (accounts[0]?.id ?? null));
-  const [freq, setFreq] = useState<Frequency>(edit?.frequency ?? "monthly");
-  const [date, setDate] = useState(edit?.anchor_date ?? tomorrow(months.today));
-  const [match, setMatch] = useState(edit?.match_text ?? "");
+  const [name, setName] = useState(edit?.name ?? sug?.name ?? "");
+  const src = edit ?? sug;
+  const [type, setType] = useState<"expense" | "income">(src && src.amount_cents > 0 ? "income" : "expense");
+  const [amount, setAmount] = useState(src ? centsToInput(Math.abs(src.amount_cents)) : "");
+  const [cat, setCat] = useState<number>(src?.category_id ?? subs.id);
+  const [acct, setAcct] = useState<number | null>(src ? src.account_id : (accounts[0]?.id ?? null));
+  const [freq, setFreq] = useState<Frequency>(src?.frequency ?? "monthly");
+  const [date, setDate] = useState(edit?.anchor_date ?? sug?.next_date ?? tomorrow(months.today));
+  const [match, setMatch] = useState(edit?.match_text ?? sug?.merchant ?? "");
   const [touched, setTouched] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -124,7 +126,7 @@ function Form({ item, onClose, onChanged }: { item: RecurringListItem | "new"; o
       onSubmit={(e) => { e.preventDefault(); void save(); }}
       className="flex min-h-full flex-col gap-4 p-5"
     >
-      <h2 id="rc-title" className="m-0 text-[17px] font-semibold">{edit ? "Edit recurring" : "Add recurring"}</h2>
+      <h2 id="rc-title" className="m-0 text-[17px] font-semibold">{edit ? "Edit recurring" : sug ? "Track recurring" : "Add recurring"}</h2>
       <Field label="Name">
         <input
           autoFocus
@@ -170,14 +172,59 @@ function Form({ item, onClose, onChanged }: { item: RecurringListItem | "new"; o
   );
 }
 
+const DISMISS_KEY = "budget.dismissedSuggestions";
+function loadDismissed(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(DISMISS_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function Suggested({ sugs, onTrack }: { sugs: RecurringSuggestion[]; onTrack: (s: RecurringSuggestion, t: HTMLElement) => void }) {
+  const [dismissed, setDismissed] = useState(loadDismissed);
+  const rows = useMemo(() => sugs.filter((s) => !dismissed.includes(s.merchant)), [sugs, dismissed]);
+  if (rows.length === 0) return null;
+  const dismiss = (m: string) => {
+    const next = [...dismissed, m];
+    setDismissed(next);
+    try { localStorage.setItem(DISMISS_KEY, JSON.stringify(next)); } catch { /* remembered for this session only */ }
+  };
+  return (
+    <section aria-label="Suggested recurring items">
+      <h2 className="m-0 mb-1 text-[17px] font-semibold">Suggested</h2>
+      <p className="m-0 mb-3 text-[13.5px] text-ink-2">Charges that repeat in your imported history.</p>
+      <Card>
+        <ul className="m-0 list-none p-0">
+          {rows.map((s) => (
+            <li key={s.merchant} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-5 py-3 text-[13.5px] last:border-b-0">
+              <div className="min-w-[160px] flex-1">
+                <div className="font-medium">{s.name}</div>
+                <div className="text-xs text-ink-3">{freqLabel(s.frequency)} · seen {s.occurrences} times · last {fmtDateY(s.last_date)}</div>
+              </div>
+              <div className={`font-medium ${s.amount_cents > 0 ? "text-pos" : ""}`}>{money(s.amount_cents, { sign: true })}</div>
+              <div className="flex gap-2">
+                <button type="button" className={`${btnPrimary} !px-3 !py-[5px]`} aria-label={`Track ${s.name}`} onClick={(e) => onTrack(s, e.currentTarget)}>Track</button>
+                <button type="button" className={`${btnSecondary} !px-3 !py-[5px]`} aria-label={`Dismiss ${s.name}`} onClick={() => dismiss(s.merchant)}>Dismiss</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </section>
+  );
+}
+
 export function Recurring() {
   const { categories, accounts, fail } = useApp();
   const q = useGet<RecurringListItem[]>("/recurring");
-  const [panel, setPanel] = useState<RecurringListItem | "new" | null>(null);
+  const sugQ = useGet<RecurringSuggestion[]>("/recurring/suggestions"); // failure just hides the card
+  const [panel, setPanel] = useState<RecurringListItem | RecurringSuggestion | "new" | null>(null);
   const trigger = useRef<HTMLElement | null>(null);
   const addBtn = useRef<HTMLButtonElement>(null);
 
-  const open = (p: RecurringListItem | "new", t: HTMLElement | null) => { trigger.current = t; setPanel(p); };
+  const open = (p: RecurringListItem | RecurringSuggestion | "new", t: HTMLElement | null) => { trigger.current = t; setPanel(p); };
   async function toggle(it: RecurringListItem, active: boolean) {
     try {
       const r = await api<RecurringListItem>(`/recurring/${it.id}`, "PATCH", { active });
@@ -238,7 +285,8 @@ export function Recurring() {
           </div>
         </Card>
       )}
-      <Panel item={panel} trigger={trigger.current} onClose={() => setPanel(null)} onChanged={(deleted) => { q.reload(); if (deleted) trigger.current = addBtn.current; }} />
+      {sugQ.data && <Suggested sugs={sugQ.data} onTrack={open} />}
+      <Panel item={panel} trigger={trigger.current} onClose={() => setPanel(null)} onChanged={(deleted) => { q.reload(); sugQ.reload(); if (deleted) trigger.current = addBtn.current; }} />
     </>
   );
 }

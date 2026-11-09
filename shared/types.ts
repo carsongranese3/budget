@@ -29,6 +29,7 @@ export interface Account {
 export interface Category {
   id: number; name: string; color: string;
   excluded_from_totals: boolean;
+  fixed: boolean;
   system_key: SystemKey | null;
   sort_order: number;
 }
@@ -39,7 +40,17 @@ export interface Rule { id: number; merchant: string; category_id: number; creat
 export interface Transaction {
   id: number; account_id: number; date: string; description: string;
   amount_cents: number; category_id: number; import_id: number; created_at: string;
+  note: string | null; custom_description: string | null; receipt_count: number;
+  original_date: string | null;
+  /** Split parts only: the hidden split parent's id. */
+  parent_id: number | null;
+  /** Split parts only: the parent's full signed amount. */
+  split_total_cents: number | null;
 }
+export interface Receipt {
+  id: number; transaction_id: number; file_name: string; mime_type: string; size_bytes: number; created_at: string;
+}
+export interface UploadReceiptRequest { file_name: string; content_base64: string }
 export interface ImportRecord {
   id: number; file_name: string; account_id: number; imported_at: string;
   row_count: number; new_count: number; skipped_count: number; unreadable_count: number;
@@ -67,7 +78,7 @@ export interface UpdateAccountRequest { name?: string; type?: AccountType; csv_f
 // Categories
 export interface CreateCategoryRequest { name: string }
 export interface ReorderCategoriesRequest { ids: number[] }
-export interface UpdateCategoryRequest { name?: string; color?: string; excluded_from_totals?: boolean }
+export interface UpdateCategoryRequest { name?: string; color?: string; excluded_from_totals?: boolean; fixed?: boolean }
 
 // Rules
 export interface RuleImpactResponse { uncategorized_count: number }
@@ -77,10 +88,19 @@ export interface ApplyRulesResponse { applied_count: number }
 export interface UpdateRuleRequest { merchant?: string; category_id?: number }
 
 // Transactions
-export interface TransactionsQuery { month: string; q?: string; account?: number; category?: number }
+/** month is required unless all = 1. day must be a real date and inside month when both are given. */
+export interface TransactionsQuery { month?: string; all?: 1; q?: string; account?: number; category?: number; day?: string }
 export interface TransactionsResponse { transactions: Transaction[]; income_cents: number; spent_cents: number }
-export interface UpdateTransactionRequest { category_id: number }
+export interface UpdateTransactionRequest { category_id?: number; note?: string | null; custom_description?: string | null; date?: string }
 export interface UncategorizedCountResponse { count: number }
+export interface BulkCategoryRequest { ids: number[]; category_id: number }
+export interface BulkCategoryResponse { updated_count: number; transactions: Transaction[] }
+
+// Splits
+export interface SplitPartInput { amount_cents: number; category_id: number; note?: string | null }
+export interface SplitRequest { parts: SplitPartInput[] }
+export type SplitResponse = Transaction[];
+export interface SplitGroup { parent: Transaction; parts: Transaction[] }
 
 // Import
 export interface SampleCsvResponse { file_name: string; content: string }
@@ -138,6 +158,8 @@ export interface BudgetsResponse {
   /** Unbudgeted spend bucket: spent = items with no budget; budget_cents null when unset. */
   other: { budget_cents: number | null; spent_cents: number };
   total_budget_cents: number; spent_cents: number;
+  /** Eligible `fixed` categories only: their non-null budgets / their spending (budgeted or not). Included in the totals above. */
+  fixed_budget_cents: number; fixed_spent_cents: number;
 }
 /** category_id null = the Other budget. */
 export interface SetBudgetRequest { month: string; category_id: number | null; amount_cents: number }
@@ -150,3 +172,18 @@ export interface RecurringListItem extends RecurringItem { next_date: string; st
 export type CreateRecurringRequest = Omit<RecurringItem, "id" | "active"> & { active?: boolean };
 export type UpdateRecurringRequest = Partial<CreateRecurringRequest>;
 export interface UpcomingResponse { expected: Occurrence[]; upcoming: Occurrence[] }
+
+export interface RecurringSuggestion {
+  merchant: string; name: string; amount_cents: number; frequency: Frequency;
+  category_id: number; account_id: number | null;
+  last_date: string; next_date: string; occurrences: number;
+}
+
+// Trends (GET /api/trends?end=YYYY-MM): arrays are 12 long, aligned to `months`.
+export interface TrendsResponse {
+  months: string[];
+  income_cents: number[];
+  spent_cents: number[];
+  categories: { category_id: number; spent_cents: number[] }[];
+  ytd: { year: number; income_cents: number; spent_cents: number; categories: { category_id: number; spent_cents: number }[] };
+}
