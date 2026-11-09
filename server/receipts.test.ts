@@ -47,7 +47,7 @@ describe("receipts", () => {
     const raw = await fetch(`${app.base}/api/receipts/${a.body.id}`);
     expect(raw.headers.get("content-type")).toBe("image/png");
     expect(raw.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(raw.headers.get("content-disposition")).toBe('inline; filename="r.png"');
+    expect(raw.headers.get("content-disposition")).toBe('inline; filename="r.png"; filename*=UTF-8\'\'r.png');
     expect(raw.headers.get("cache-control")).toBe("no-store");
     expect(raw.headers.get("cross-origin-resource-policy")).toBe("same-origin");
     expect(raw.headers.get("content-disposition")).toContain("filename*=UTF-8''r.png");

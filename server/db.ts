@@ -12,7 +12,7 @@ export const SWATCHES = [
 ];
 
 // Migrations run in order; PRAGMA user_version records how many have been applied.
-const MIGRATIONS = [
+export const MIGRATIONS = [
   `CREATE TABLE accounts (
      id INTEGER PRIMARY KEY,
      name TEXT NOT NULL UNIQUE COLLATE NOCASE,

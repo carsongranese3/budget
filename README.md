@@ -1,5 +1,7 @@
 # Budget — personal finances, on your own machine
 
+[![tests](https://github.com/carsongranese3/budget/actions/workflows/tests.yml/badge.svg)](https://github.com/carsongranese3/budget/actions/workflows/tests.yml)
+
 A single-user budgeting app that runs on `localhost`. You import the CSV statements your bank and card
 already export. The app learns how to categorize them as you correct it and rolls everything up into
 monthly budgets, a dashboard, charts and recurring bills and paychecks.

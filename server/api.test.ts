@@ -7,7 +7,7 @@ import http from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { detectFormat, parseCsvText } from "../shared/csv.js";
 import { createApp } from "./app.js";
-import { openDb } from "./db.js";
+import { MIGRATIONS, openDb } from "./db.js";
 import { startApp } from "../test/helpers.js";
 
 const fx = (n: string) => readFileSync(new URL(`../test/fixtures/${n}`, import.meta.url), "utf8");
@@ -287,11 +287,10 @@ describe("data management", () => {
   });
   it("migration 2 applies on an existing v1 DB", () => {
     const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mig-")), "b.db");
-    openDb(f).close();
     const raw = new Database(f);
-    raw.exec("DROP TABLE other_budgets"); raw.pragma("user_version = 1"); raw.close();
+    raw.exec(MIGRATIONS[0]); raw.pragma("user_version = 1"); raw.close();
     const db = openDb(f);
-    expect(db.pragma("user_version", { simple: true })).toBe(2);
+    expect(db.pragma("user_version", { simple: true })).toBe(MIGRATIONS.length);
     expect(db.prepare("SELECT COUNT(*) n FROM other_budgets").get()).toEqual({ n: 0 });
     db.close();
   });
@@ -387,7 +386,7 @@ describe("real-DB guard", () => {
     try {
       const db = openDb("data/budget.db");
       const before = db.prepare("SELECT count(*) n FROM categories").get();
-      db.prepare("INSERT INTO accounts (name) VALUES ('keep')").run();
+      db.prepare("INSERT INTO accounts (name, type, created_at) VALUES ('keep', 'checking', 'x')").run();
       const server = createApp(db, () => "2026-10-25").listen(0, "127.0.0.1");
       await new Promise((r) => server.once("listening", r));
       const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/api`;
