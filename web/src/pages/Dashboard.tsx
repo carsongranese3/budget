@@ -248,13 +248,13 @@ function Loaded({ month, months, categories, to }: Pick<ReturnType<typeof useApp
       {head}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
         <div className={tileCls}>
-          <Tile label="Income" value={money(s.income_cents)} valueCls="text-pos" sub={s.expected_income_cents > 0 ? expected(s.expected_income_cents) : plural(s.income_count, "deposit")} />
+          <Tile label="Income" value={money(s.income_cents)} sub={s.expected_income_cents > 0 ? expected(s.expected_income_cents) : plural(s.income_count, "deposit")} />
         </div>
         <div className={tileCls}>
           <Tile label="Spent this month" value={money(s.spent_cents)} sub={s.expected_spent_cents > 0 ? expected(s.expected_spent_cents) : plural(s.spent_count, "transaction")} />
         </div>
         <div className={tileCls}>
-          <Tile label="Net" value={money(s.net_cents, { sign: true })} sub={kept} />
+          <Tile label="Net" value={money(s.net_cents, { sign: true })} valueCls={s.net_cents > 0 ? "text-pos" : s.net_cents < 0 ? "text-neg" : ""} sub={kept} />
         </div>
         <button
           type="button"

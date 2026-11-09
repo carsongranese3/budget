@@ -170,9 +170,9 @@ Routes: `/`, `/transactions`, `/chart`, `/trends`, `/budgets`, `/recurring`, `/i
 ### 4.1 Dashboard (`/`) — README §1
 Data: totals for the selected month, 7-month income/spend series, spending by category, budget progress, expected + upcoming recurring.
 
-- DB-1 Income tile = `income_cents` (green). Sub-line: "+$X expected, not imported yet" when expected income (§6.4) > 0, else "N deposits" (count of Income-category transactions).
+- DB-1 Income tile = `income_cents` (default ink color, not green). Sub-line: "+$X expected, not imported yet" when expected income (§6.4) > 0, else "N deposits" (count of Income-category transactions).
 - DB-2 Spent tile = `spent_cents`. Sub-line: "+$X expected, not imported yet" when expected spending > 0, else "N transactions" (count of counted, non-Income transactions).
-- DB-3 Net tile shows "+$X" / "−$X". Sub-line "N% of income kept" = round(net / income × 100); when income is 0 the sub-line is "—".
+- DB-3 Net tile shows "+$X" / "−$X", green when positive, red when negative, default ink at $0. Sub-line "N% of income kept" = round(net / income × 100); when income is 0 the sub-line is "—".
 - DB-4 Uncategorized tile shows the month's Uncategorized count; when > 0 it has the amber treatment. Clicking it opens `/transactions?month=…&category=<uncategorized id>`.
 - DB-5 Income vs spending chart (hand-rolled HTML/CSS bars) shows 7 months centered on the selected month (window end = min(max(selected+3, earliest+6), max(current, selected)); see docs/decisions.md), paired bars, y-axis gridlines at quarters with step = max($500, ceil(max/4/$500)×$500) labelled "$0, $1.5k…". Selected month at full opacity, others 0.45. Hover updates the caption "<Month> — income $… · spending $…"; click on another month selects it on the Dashboard (recentering the window); click on the already-selected month opens Transactions for it (both only within G5 range); the top-bar arrows change the selected month.
 - DB-6 Upcoming recurring card: first the "Expected this month, not imported yet" rows (dashed border, dimmed amount, "Expected Oct 22 · <account>"), then the next 10 occurrences strictly after today across all active items, sorted by date then name, each "Due Nov 1 · <account>". The list scrolls inside the card. "Manage" goes to Recurring. No active items → "No recurring items yet" with "Manage" link.
